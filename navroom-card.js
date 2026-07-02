@@ -1,7 +1,13 @@
 /**
- * NavRoom Card – Custom Lovelace Card (v2.0.0)
+ * NavRoom Card – Custom Lovelace Card (v2.1.0)
  * Room overview card with area icon, light-color accent, power button,
  * sortable sensor chips (temperature, humidity, CO2) and three layout variants.
+ *
+ * v2.1.0:
+ *  - The editor now shows which entities auto-discovery has picked for the
+ *    selected area, so the empty pickers are no longer confusing.
+ *  - The power button got subtle depth (soft shadow + hairline ring) so it
+ *    no longer visually drowns on light themes with bright accent colors.
  *
  * v2.0.0:
  *  - Auto-discovery: pick an area and the card finds the light (group
@@ -15,7 +21,7 @@
  * https://github.com/smarthomebutbetter/navroom-card
  */
 
-const RK_VERSION = '2.0.0';
+const RK_VERSION = '2.1.0';
 
 const RK_DEFAULTS = {
   variant: 'badge',
@@ -87,6 +93,9 @@ const RK_I18N = {
     order_title: 'Chip order',
     order_hint: 'Sort with the arrows – chips without a configured sensor are simply skipped.',
     discovery_hint: 'Entities are discovered automatically from the area – pickers below override the automatic choice.',
+    discovery_found: 'Auto-discovered from this area:',
+    discovery_none: 'No matching entities found in this area yet.',
+    short_light: 'Light',
     order_temp: 'Temperature',
     order_humidity: 'Humidity',
     order_co2: 'CO2',
@@ -130,6 +139,9 @@ const RK_I18N = {
     order_title: 'Chip-Reihenfolge',
     order_hint: 'Mit den Pfeilen sortieren – nicht konfigurierte Chips werden einfach übersprungen.',
     discovery_hint: 'Entitäten werden automatisch aus dem Bereich ermittelt – die Auswahlfelder unten überschreiben die Automatik.',
+    discovery_found: 'Automatisch aus dem Bereich erkannt:',
+    discovery_none: 'In diesem Bereich wurden noch keine passenden Entitäten gefunden.',
+    short_light: 'Licht',
     order_temp: 'Temperatur',
     order_humidity: 'Luftfeuchtigkeit',
     order_co2: 'CO2',
@@ -151,6 +163,58 @@ function rkLang(hass) {
 function rkT(hass, key) {
   const lang = rkLang(hass);
   return (RK_I18N[lang] && RK_I18N[lang][key]) || RK_I18N.en[key] || key;
+}
+
+/* -------------------- Auto-discovery (shared) -------------------- */
+
+function rkDiscover(hass, areaId) {
+  if (!hass || !areaId || !hass.entities) return {};
+
+  const inArea = (e) => {
+    if (e.area_id) return e.area_id === areaId;
+    if (e.device_id && hass.devices && hass.devices[e.device_id]) {
+      return hass.devices[e.device_id].area_id === areaId;
+    }
+    return false;
+  };
+
+  const lights = [];
+  let temp = null;
+  let humidity = null;
+  let co2 = null;
+
+  Object.values(hass.entities).forEach((e) => {
+    if (e.disabled_by || e.hidden_by) return;
+    if (!inArea(e)) return;
+    const id = e.entity_id;
+    const st = hass.states[id];
+    if (!st) return;
+    const domain = id.split('.')[0];
+    if (domain === 'light') {
+      lights.push(st);
+      return;
+    }
+    if (domain === 'sensor') {
+      const dc = st.attributes && st.attributes.device_class;
+      if (dc === 'temperature' && !temp) temp = id;
+      else if (dc === 'humidity' && !humidity) humidity = id;
+      else if (dc === 'carbon_dioxide' && !co2) co2 = id;
+    }
+  });
+
+  // Prefer a light group (the one with the most members), otherwise the first light
+  let light = null;
+  const groups = lights.filter(
+    (s) => s.attributes && Array.isArray(s.attributes.entity_id) && s.attributes.entity_id.length
+  );
+  if (groups.length) {
+    groups.sort((a, b) => b.attributes.entity_id.length - a.attributes.entity_id.length);
+    light = groups[0].entity_id;
+  } else if (lights.length) {
+    light = lights[0].entity_id;
+  }
+
+  return { light, temp, humidity, co2 };
 }
 
 /* ------------------------------ Card ------------------------------ */
@@ -199,60 +263,14 @@ class NavRoomCard extends HTMLElement {
   getCardSize() { return 2; }
   getGridOptions() { return { columns: 6, rows: 2, min_columns: 4, min_rows: 2 }; }
 
-  /* Auto-discovery: find entities in the configured area (cached per registry) */
   _discover() {
     const hass = this._hass;
     const areaId = this._c.area;
     if (!hass || !areaId || !hass.entities) return {};
     if (this._discFor === hass.entities && this._discArea === areaId) return this._disc;
-
-    const inArea = (e) => {
-      if (e.area_id) return e.area_id === areaId;
-      if (e.device_id && hass.devices && hass.devices[e.device_id]) {
-        return hass.devices[e.device_id].area_id === areaId;
-      }
-      return false;
-    };
-
-    const lights = [];
-    let temp = null;
-    let humidity = null;
-    let co2 = null;
-
-    Object.values(hass.entities).forEach((e) => {
-      if (e.disabled_by || e.hidden_by) return;
-      if (!inArea(e)) return;
-      const id = e.entity_id;
-      const st = hass.states[id];
-      if (!st) return;
-      const domain = id.split('.')[0];
-      if (domain === 'light') {
-        lights.push(st);
-        return;
-      }
-      if (domain === 'sensor') {
-        const dc = st.attributes && st.attributes.device_class;
-        if (dc === 'temperature' && !temp) temp = id;
-        else if (dc === 'humidity' && !humidity) humidity = id;
-        else if (dc === 'carbon_dioxide' && !co2) co2 = id;
-      }
-    });
-
-    // Prefer a light group (the one with the most members), otherwise the first light
-    let light = null;
-    const groups = lights.filter(
-      (s) => s.attributes && Array.isArray(s.attributes.entity_id) && s.attributes.entity_id.length
-    );
-    if (groups.length) {
-      groups.sort((a, b) => b.attributes.entity_id.length - a.attributes.entity_id.length);
-      light = groups[0].entity_id;
-    } else if (lights.length) {
-      light = lights[0].entity_id;
-    }
-
+    this._disc = rkDiscover(hass, areaId);
     this._discFor = hass.entities;
     this._discArea = areaId;
-    this._disc = { light, temp, humidity, co2 };
     return this._disc;
   }
 
@@ -347,7 +365,8 @@ class NavRoomCard extends HTMLElement {
           justify-content: center;
           cursor: pointer;
           background: var(--rk-neutral);
-          transition: transform .15s ease, background .25s ease;
+          box-shadow: var(--rk-pwr-shadow, none);
+          transition: transform .15s ease, background .25s ease, box-shadow .25s ease;
         }
         #pwr.show { display: flex; }
         #pwr:active { transform: scale(0.90); }
@@ -570,6 +589,14 @@ class NavRoomCard extends HTMLElement {
     // Theme-independent neutral tones (dark/light)
     const dark = !!(hass.themes && hass.themes.darkMode);
     el.card.style.setProperty('--rk-neutral', dark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)');
+    // Subtle depth for the power button – keeps it visible on light themes
+    // even when the accent color is very bright
+    el.card.style.setProperty(
+      '--rk-pwr-shadow',
+      dark
+        ? '0 2px 5px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.06)'
+        : '0 1px 4px rgba(0,0,0,0.16), 0 0 0 1px rgba(0,0,0,0.06)'
+    );
 
     // Name & icon from the area registry (with overrides)
     const area = c.area && hass.areas ? hass.areas[c.area] : null;
@@ -798,8 +825,24 @@ class NavRoomCardEditor extends HTMLElement {
         .rk-disc-hint {
           font-size: 12px;
           color: var(--secondary-text-color);
-          margin: 4px 0 12px;
+          margin: 4px 0 8px;
           line-height: 1.4;
+        }
+        .rk-disc-result {
+          font-size: 12px;
+          line-height: 1.5;
+          color: var(--primary-text-color);
+          background: rgba(var(--rgb-primary-color, 100,100,255), 0.08);
+          border-left: 3px solid var(--primary-color);
+          border-radius: 6px;
+          padding: 8px 10px;
+          margin-bottom: 14px;
+          word-break: break-all;
+        }
+        .rk-disc-result.empty {
+          color: var(--secondary-text-color);
+          background: none;
+          border-left-color: var(--divider-color);
         }
         .rk-order { margin-top: 20px; }
         .rk-order-title {
@@ -877,6 +920,10 @@ class NavRoomCardEditor extends HTMLElement {
       this._discHint.className = 'rk-disc-hint';
       this.appendChild(this._discHint);
 
+      this._discResult = document.createElement('div');
+      this._discResult.className = 'rk-disc-result';
+      this.appendChild(this._discResult);
+
       this._form = document.createElement('ha-form');
       this._form.computeLabel = (s) => rkT(this._hass, s.name);
       this._form.addEventListener('value-changed', (ev) => {
@@ -923,7 +970,41 @@ class NavRoomCardEditor extends HTMLElement {
     this._form.hass = this._hass;
     this._form.data = { ...RK_DEFAULTS, ...this._config };
     this._form.schema = rkBuildSchema(this._hass);
+    this._renderDiscovery();
     this._renderOrder();
+  }
+
+  /* Show what auto-discovery found for the selected area */
+  _renderDiscovery() {
+    const el = this._discResult;
+    if (!el) return;
+    const areaId = this._config.area;
+    if (!this._hass || !areaId) {
+      el.textContent = '';
+      el.style.display = 'none';
+      return;
+    }
+    el.style.display = 'block';
+    const d = rkDiscover(this._hass, areaId);
+    const rows = [];
+    const map = [
+      ['light', 'short_light'],
+      ['temp', 'order_temp'],
+      ['humidity', 'order_humidity'],
+      ['co2', 'order_co2'],
+    ];
+    map.forEach(([key, labelKey]) => {
+      if (this._config[key]) return; // manual override wins, nothing to show
+      if (d[key]) rows.push(`${rkT(this._hass, labelKey)} → ${d[key]}`);
+    });
+    if (rows.length) {
+      el.classList.remove('empty');
+      el.textContent = rkT(this._hass, 'discovery_found') + '\n' + rows.join('\n');
+      el.style.whiteSpace = 'pre-line';
+    } else {
+      el.classList.add('empty');
+      el.textContent = rkT(this._hass, 'discovery_none');
+    }
   }
 
   _renderOrder() {
