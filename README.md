@@ -4,7 +4,7 @@ A room overview card for Home Assistant that tints itself in the color of
 your lights. Area-aware, auto-discovering, fully UI-configurable, zero
 dependencies.
 
-![Version](https://img.shields.io/badge/version-2.0.0-orange)
+![Version](https://img.shields.io/badge/version-2.1.0-orange)
 ![HACS](https://img.shields.io/badge/HACS-custom-blue)
 
 ## Preview
