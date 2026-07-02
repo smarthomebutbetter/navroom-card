@@ -1,18 +1,21 @@
 /**
- * NavRoom Card – Custom Lovelace Card (v1.6.0)
+ * NavRoom Card – Custom Lovelace Card (v2.0.0)
  * Room overview card with area icon, light-color accent, power button,
  * sortable sensor chips (temperature, humidity, CO2) and three layout variants.
  *
- * Variants: badge | chip | pur
- * Actions:  tap / hold / double_tap for the card, power_action for the button
- * i18n:     English + German (auto-detected from the HA user language)
- *
- * Note: `custom:raum-karte` is kept as a backward-compatible alias.
+ * v2.0.0:
+ *  - Auto-discovery: pick an area and the card finds the light (group
+ *    preferred) and temperature/humidity/CO2 sensors on its own.
+ *    Manual entity pickers always override auto-discovery.
+ *  - Theme-adaptive: corner radius, border and shadow follow the active
+ *    theme unless explicitly configured.
+ *  - `custom:raum-karte` still renders as a backward-compatible alias,
+ *    but is not offered in the card picker.
  *
  * https://github.com/smarthomebutbetter/navroom-card
  */
 
-const RK_VERSION = '1.6.0';
+const RK_VERSION = '2.0.0';
 
 const RK_DEFAULTS = {
   variant: 'badge',
@@ -83,6 +86,7 @@ const RK_I18N = {
     section_design: 'Design',
     order_title: 'Chip order',
     order_hint: 'Sort with the arrows – chips without a configured sensor are simply skipped.',
+    discovery_hint: 'Entities are discovered automatically from the area – pickers below override the automatic choice.',
     order_temp: 'Temperature',
     order_humidity: 'Humidity',
     order_co2: 'CO2',
@@ -92,7 +96,7 @@ const RK_I18N = {
     one_light: '1 light',
     n_lights: '{n} lights',
     error_area: 'Please select an area or set a name.',
-    card_description: 'Room overview with area icon, light-color accent, configurable power button, sortable sensor chips and three layout variants.',
+    card_description: 'Room overview with auto-discovery per area, light-color accent, configurable power button, sortable sensor chips and three layout variants.',
   },
   de: {
     area: 'Bereich',
@@ -125,6 +129,7 @@ const RK_I18N = {
     section_design: 'Design',
     order_title: 'Chip-Reihenfolge',
     order_hint: 'Mit den Pfeilen sortieren – nicht konfigurierte Chips werden einfach übersprungen.',
+    discovery_hint: 'Entitäten werden automatisch aus dem Bereich ermittelt – die Auswahlfelder unten überschreiben die Automatik.',
     order_temp: 'Temperatur',
     order_humidity: 'Luftfeuchtigkeit',
     order_co2: 'CO2',
@@ -134,7 +139,7 @@ const RK_I18N = {
     one_light: '1 Licht',
     n_lights: '{n} Lichter',
     error_area: 'Bitte einen Bereich wählen oder einen Namen setzen.',
-    card_description: 'Raumübersicht mit Area-Icon, Lichtfarben-Akzent, konfigurierbarem Power-Button, sortierbaren Sensor-Chips und drei Layout-Varianten.',
+    card_description: 'Raumübersicht mit Auto-Discovery pro Bereich, Lichtfarben-Akzent, konfigurierbarem Power-Button, sortierbaren Sensor-Chips und drei Layout-Varianten.',
   },
 };
 
@@ -171,9 +176,11 @@ class NavRoomCard extends HTMLElement {
     if (!config || (!config.area && !config.name)) {
       throw new Error(RK_I18N.en.error_area + ' / ' + RK_I18N.de.error_area);
     }
+    this._userKeys = new Set(Object.keys(config));
     this._c = { ...RK_DEFAULTS, ...config };
     if (this._c.variant === 'zaehler') this._c.variant = 'badge';
     if (!RK_VARIANTS.includes(this._c.variant)) this._c.variant = 'badge';
+    this._discFor = null;
     this._built = false;
     if (this._hass) this._build();
   }
@@ -192,29 +199,103 @@ class NavRoomCard extends HTMLElement {
   getCardSize() { return 2; }
   getGridOptions() { return { columns: 6, rows: 2, min_columns: 4, min_rows: 2 }; }
 
-  _watchedIds() {
+  /* Auto-discovery: find entities in the configured area (cached per registry) */
+  _discover() {
+    const hass = this._hass;
+    const areaId = this._c.area;
+    if (!hass || !areaId || !hass.entities) return {};
+    if (this._discFor === hass.entities && this._discArea === areaId) return this._disc;
+
+    const inArea = (e) => {
+      if (e.area_id) return e.area_id === areaId;
+      if (e.device_id && hass.devices && hass.devices[e.device_id]) {
+        return hass.devices[e.device_id].area_id === areaId;
+      }
+      return false;
+    };
+
+    const lights = [];
+    let temp = null;
+    let humidity = null;
+    let co2 = null;
+
+    Object.values(hass.entities).forEach((e) => {
+      if (e.disabled_by || e.hidden_by) return;
+      if (!inArea(e)) return;
+      const id = e.entity_id;
+      const st = hass.states[id];
+      if (!st) return;
+      const domain = id.split('.')[0];
+      if (domain === 'light') {
+        lights.push(st);
+        return;
+      }
+      if (domain === 'sensor') {
+        const dc = st.attributes && st.attributes.device_class;
+        if (dc === 'temperature' && !temp) temp = id;
+        else if (dc === 'humidity' && !humidity) humidity = id;
+        else if (dc === 'carbon_dioxide' && !co2) co2 = id;
+      }
+    });
+
+    // Prefer a light group (the one with the most members), otherwise the first light
+    let light = null;
+    const groups = lights.filter(
+      (s) => s.attributes && Array.isArray(s.attributes.entity_id) && s.attributes.entity_id.length
+    );
+    if (groups.length) {
+      groups.sort((a, b) => b.attributes.entity_id.length - a.attributes.entity_id.length);
+      light = groups[0].entity_id;
+    } else if (lights.length) {
+      light = lights[0].entity_id;
+    }
+
+    this._discFor = hass.entities;
+    this._discArea = areaId;
+    this._disc = { light, temp, humidity, co2 };
+    return this._disc;
+  }
+
+  /* Effective entities: manual config wins over auto-discovery */
+  _eff() {
     const c = this._c;
+    const d = this._discover();
+    return {
+      light: c.light || d.light || '',
+      temp: c.temp || d.temp || '',
+      humidity: c.humidity || d.humidity || '',
+      co2: c.co2 || d.co2 || '',
+    };
+  }
+
+  _watchedIds() {
+    const e = this._eff();
     const ids = [];
-    if (c.light) {
-      ids.push(c.light);
-      const st = this._hass && this._hass.states[c.light];
+    if (e.light) {
+      ids.push(e.light);
+      const st = this._hass && this._hass.states[e.light];
       const members = st && st.attributes ? st.attributes.entity_id : null;
       if (Array.isArray(members)) ids.push(...members);
     }
-    if (c.temp) ids.push(c.temp);
-    if (c.humidity) ids.push(c.humidity);
-    if (c.co2) ids.push(c.co2);
+    if (e.temp) ids.push(e.temp);
+    if (e.humidity) ids.push(e.humidity);
+    if (e.co2) ids.push(e.co2);
     return ids;
   }
 
   _statesChanged(a, b) {
     if (!a) return true;
+    if (a.entities !== b.entities) return true;
     return this._watchedIds().some((id) => a.states[id] !== b.states[id]);
   }
 
   _build() {
     const c = this._c;
     const chipIcon = Math.round(c.chip_font + 3);
+    // Theme-adaptive defaults: only force values the user explicitly configured
+    const radius = this._userKeys.has('radius')
+      ? `${c.radius}px`
+      : 'var(--ha-card-border-radius, 12px)';
     this.shadowRoot.innerHTML = `
       <style>
         :host { display: block; }
@@ -222,9 +303,9 @@ class NavRoomCard extends HTMLElement {
           position: relative;
           height: ${c.height}px;
           padding: ${c.padding}px;
-          border-radius: ${c.radius}px;
-          border: none;
-          box-shadow: none;
+          border-radius: ${radius};
+          border: var(--ha-card-border-width, 0px) solid var(--ha-card-border-color, transparent);
+          box-shadow: var(--ha-card-box-shadow, none);
           box-sizing: border-box;
           display: grid;
           grid-template-rows: ${c.head_height}px 1fr auto;
@@ -437,7 +518,7 @@ class NavRoomCard extends HTMLElement {
   _fireHassAction(actionConfig) {
     this.dispatchEvent(new CustomEvent('hass-action', {
       detail: {
-        config: { entity: this._c.light, tap_action: actionConfig },
+        config: { entity: this._eff().light, tap_action: actionConfig },
         action: 'tap',
       },
       bubbles: true,
@@ -463,8 +544,9 @@ class NavRoomCard extends HTMLElement {
       this._fireHassAction(cfg);
       return;
     }
-    if (this._c.light && this._hass) {
-      this._hass.callService('light', 'toggle', { entity_id: this._c.light });
+    const light = this._eff().light;
+    if (light && this._hass) {
+      this._hass.callService('light', 'toggle', { entity_id: light });
     }
   }
 
@@ -483,6 +565,8 @@ class NavRoomCard extends HTMLElement {
     const el = this._el;
     if (!hass || !el) return;
 
+    const eff = this._eff();
+
     // Theme-independent neutral tones (dark/light)
     const dark = !!(hass.themes && hass.themes.darkMode);
     el.card.style.setProperty('--rk-neutral', dark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)');
@@ -493,7 +577,7 @@ class NavRoomCard extends HTMLElement {
     el.ic.setAttribute('icon', c.icon || (area && area.icon) || 'mdi:home-outline');
 
     // Light state & accent color (average of RGB colors of lights that are on)
-    const light = c.light ? hass.states[c.light] : null;
+    const light = eff.light ? hass.states[eff.light] : null;
     const on = !!(light && light.state === 'on');
     let count = 0;
     const cols = [];
@@ -526,26 +610,26 @@ class NavRoomCard extends HTMLElement {
     el.card.classList.toggle('on', on);
 
     // Power button & badge (badge only in "badge" variant)
-    el.pwr.classList.toggle('show', !!c.light);
+    el.pwr.classList.toggle('show', !!eff.light);
     el.badge.textContent = String(count);
     el.badge.classList.toggle('show', c.variant === 'badge' && count > 0);
 
     // Chips: build and sort by configured order
     const defs = {};
-    if (c.temp) {
-      defs.temp = { icon: 'mdi:thermometer', t: this._fmt(hass.states[c.temp], 1, '°'), cls: '' };
+    if (eff.temp) {
+      defs.temp = { icon: 'mdi:thermometer', t: this._fmt(hass.states[eff.temp], 1, '°'), cls: '' };
     }
-    if (c.humidity) {
-      defs.humidity = { icon: 'mdi:water-percent', t: this._fmt(hass.states[c.humidity], 0, '%'), cls: '' };
+    if (eff.humidity) {
+      defs.humidity = { icon: 'mdi:water-percent', t: this._fmt(hass.states[eff.humidity], 0, '%'), cls: '' };
     }
-    if (c.co2) {
-      const v = hass.states[c.co2] ? parseFloat(hass.states[c.co2].state) : NaN;
+    if (eff.co2) {
+      const v = hass.states[eff.co2] ? parseFloat(hass.states[eff.co2].state) : NaN;
       let cls = '';
       if (!isNaN(v) && v >= RK_CO2_ALERT) cls = 'alert';
       else if (!isNaN(v) && v >= RK_CO2_WARN) cls = 'warn';
-      defs.co2 = { icon: 'mdi:molecule-co2', t: this._fmt(hass.states[c.co2], 0, ' ppm'), cls };
+      defs.co2 = { icon: 'mdi:molecule-co2', t: this._fmt(hass.states[eff.co2], 0, ' ppm'), cls };
     }
-    if (c.variant === 'chip' && c.light) {
+    if (c.variant === 'chip' && eff.light) {
       let t;
       if (count === 0) t = rkT(hass, 'off');
       else if (count === 1) t = rkT(hass, 'one_light');
@@ -579,17 +663,21 @@ class NavRoomCard extends HTMLElement {
       }
       history.pushState(null, '', path);
       window.dispatchEvent(new CustomEvent('location-changed', { bubbles: true, composed: true }));
-    } else if (c.light) {
-      this.dispatchEvent(new CustomEvent('hass-more-info', {
-        detail: { entityId: c.light },
-        bubbles: true,
-        composed: true,
-      }));
+    } else {
+      const light = this._eff().light;
+      if (light) {
+        this.dispatchEvent(new CustomEvent('hass-more-info', {
+          detail: { entityId: light },
+          bubbles: true,
+          composed: true,
+        }));
+      }
     }
   }
 }
 
-/* Backward-compatible alias for existing `custom:raum-karte` configs */
+/* Backward-compatible alias element for existing `custom:raum-karte` configs
+   (renders identically, but is not offered in the card picker) */
 class RaumKarteAlias extends NavRoomCard {}
 
 /* ------------------------------ Editor ------------------------------ */
@@ -707,6 +795,12 @@ class NavRoomCardEditor extends HTMLElement {
     if (!this._form) {
       const style = document.createElement('style');
       style.textContent = `
+        .rk-disc-hint {
+          font-size: 12px;
+          color: var(--secondary-text-color);
+          margin: 4px 0 12px;
+          line-height: 1.4;
+        }
         .rk-order { margin-top: 20px; }
         .rk-order-title {
           font-size: 14px;
@@ -779,6 +873,10 @@ class NavRoomCardEditor extends HTMLElement {
       `;
       this.appendChild(style);
 
+      this._discHint = document.createElement('div');
+      this._discHint.className = 'rk-disc-hint';
+      this.appendChild(this._discHint);
+
       this._form = document.createElement('ha-form');
       this._form.computeLabel = (s) => rkT(this._hass, s.name);
       this._form.addEventListener('value-changed', (ev) => {
@@ -817,6 +915,7 @@ class NavRoomCardEditor extends HTMLElement {
       });
     }
 
+    this._discHint.textContent = rkT(this._hass, 'discovery_hint');
     this._orderBox.querySelector('.rk-order-title').textContent = rkT(this._hass, 'order_title');
     this._orderBox.querySelector('.rk-order-hint').textContent = rkT(this._hass, 'order_hint');
     this._orderBox.querySelector('.rk-reset-label').textContent = rkT(this._hass, 'reset');
