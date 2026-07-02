@@ -1,13 +1,24 @@
 # NavRoom Card
 
-A room overview card for Home Assistant with automatic area integration,
-light-color accents and a fully visual configuration editor.
+A room overview card for Home Assistant that tints itself in the color of
+your lights. Area-aware, auto-discovering, fully UI-configurable, zero
+dependencies.
 
 ![Version](https://img.shields.io/badge/version-2.0.0-orange)
 ![HACS](https://img.shields.io/badge/HACS-custom-blue)
 
+## Preview
+
+| | Lights on | Lights off |
+|---|---|---|
+| **Dark mode** | ![Dark on](navroom-dark-on.png) | ![Dark off](navroom-dark-off.png) |
+| **Light mode** | ![Light on](navroom-light-on.png) | ![Light off](navroom-light-off.png) |
+
 ## Features
 
+- **Auto-discovery** – just set an area and the card finds the light
+  (group preferred) and temperature/humidity/CO2 sensors on its own.
+  Manual pickers always override the automatic choice.
 - **Area integration** – name and icon are pulled automatically from the
   Home Assistant area registry. Change the area icon once, every card follows.
 - **Light-color accent** – when lights are on, the card computes the average
@@ -22,6 +33,8 @@ light-color accents and a fully visual configuration editor.
 - **Sortable chip order** – arrange the chips per card with arrow buttons in
   the editor.
 - **Three layout variants** – counter badge, lights chip, or plain.
+- **Theme-adaptive design** – corner radius, border and shadow follow the
+  active theme unless explicitly configured.
 - **Standard HA actions** – tap / hold / double-tap for the card plus a
   separate action for the power button, using the native action selector.
 - **Full UI editor** – area picker, filtered entity pickers, design sliders,
@@ -45,7 +58,15 @@ light-color accents and a fully visual configuration editor.
 
 ## Configuration
 
-Everything can be configured through the visual editor. Minimal YAML:
+Everything can be configured through the visual editor. Thanks to
+auto-discovery, the minimal config is a single line:
+
+```yaml
+type: custom:navroom-card
+area: living_room
+```
+
+Full example with manual overrides:
 
 ```yaml
 type: custom:navroom-card
@@ -54,17 +75,26 @@ light: light.living_room_group
 temp: sensor.living_room_temperature
 humidity: sensor.living_room_humidity
 co2: sensor.living_room_co2
+variant: badge
+chip_order:
+  - temp
+  - humidity
+  - co2
+  - light
+tap_action:
+  action: navigate
+  navigation_path: /lovelace/living-room
 ```
 
 ### Options
 
 | Option | Type | Default | Description |
 |---|---|---|---|
-| `area` | string | – | Area ID; provides name and icon |
-| `light` | entity | – | Light group or single light |
-| `temp` | entity | – | Temperature sensor |
-| `humidity` | entity | – | Humidity sensor |
-| `co2` | entity | – | CO2 sensor (ppm, with warning colors) |
+| `area` | string | – | Area ID; provides name, icon and auto-discovery |
+| `light` | entity | auto-discovered | Light group or single light |
+| `temp` | entity | auto-discovered | Temperature sensor |
+| `humidity` | entity | auto-discovered | Humidity sensor |
+| `co2` | entity | auto-discovered | CO2 sensor (ppm, with warning colors) |
 | `variant` | string | `badge` | `badge`, `chip` or `pur` |
 | `chip_order` | list | `[temp, humidity, co2, light]` | Chip display order |
 | `tap_action` | action | more-info | Card tap |
@@ -72,7 +102,7 @@ co2: sensor.living_room_co2
 | `double_tap_action` | action | – | Card double tap |
 | `power_action` | action | toggle light | Power button tap |
 | `name` / `icon` | string | from area | Manual overrides |
-| `height`, `radius`, `icon_size`, `name_size`, `chip_height`, `chip_font`, `pwr_size`, `badge_size`, `bg_tint`, `accent_fallback` | number/string | see editor | Design options |
+| `height`, `radius`, `icon_size`, `name_size`, `chip_height`, `chip_font`, `pwr_size`, `badge_size`, `bg_tint`, `accent_fallback` | number/string | see editor | Design options (unset values adapt to the theme) |
 
 ## License
 
