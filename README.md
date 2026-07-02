@@ -3,7 +3,7 @@
 A room overview card for Home Assistant with automatic area integration,
 light-color accents and a fully visual configuration editor.
 
-![Version](https://img.shields.io/badge/version-1.6.0-orange)
+![Version](https://img.shields.io/badge/version-2.0.0-orange)
 ![HACS](https://img.shields.io/badge/HACS-custom-blue)
 
 ## Features
