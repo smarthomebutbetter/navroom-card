@@ -1,7 +1,12 @@
 /**
- * NavRoom Card – Custom Lovelace Card (v2.1.3)
+ * NavRoom Card – Custom Lovelace Card (v2.1.0)
  * Room overview card with area icon, light-color accent, power button,
  * sortable sensor chips (temperature, humidity, CO2) and three layout variants.
+ *
+ * v2.2.0:
+ *  - Selecting an area in the editor now pre-fills the light and sensor
+ *    pickers with the auto-discovered entities (visible and editable).
+ *    Changing the area re-runs discovery and refills the pickers.
  *
  * v2.1.3:
  *  - Fixed preview rendering in HACS by using portable Markdown images.
@@ -13,8 +18,6 @@
  *  - Added theme-aware dark-mode images and animations to the documentation.
  *
  * v2.1.0:
- *  - The editor now shows which entities auto-discovery has picked for the
- *    selected area, so the empty pickers are no longer confusing.
  *  - The power button got subtle depth (soft shadow + hairline ring) so it
  *    no longer visually drowns on light themes with bright accent colors.
  *
@@ -30,7 +33,7 @@
  * https://github.com/smarthomebutbetter/navroom-card
  */
 
-const RK_VERSION = '2.1.3';
+const RK_VERSION = '2.2.0';
 
 const RK_DEFAULTS = {
   variant: 'badge',
@@ -101,10 +104,7 @@ const RK_I18N = {
     section_design: 'Design',
     order_title: 'Chip order',
     order_hint: 'Sort with the arrows – chips without a configured sensor are simply skipped.',
-    discovery_hint: 'Entities are discovered automatically from the area – pickers below override the automatic choice.',
-    discovery_found: 'Auto-discovered from this area:',
-    discovery_none: 'No matching entities found in this area yet.',
-    short_light: 'Light',
+    discovery_hint: 'Selecting an area fills in the light and sensors below automatically – adjust them anytime.',
     order_temp: 'Temperature',
     order_humidity: 'Humidity',
     order_co2: 'CO2',
@@ -147,10 +147,7 @@ const RK_I18N = {
     section_design: 'Design',
     order_title: 'Chip-Reihenfolge',
     order_hint: 'Mit den Pfeilen sortieren – nicht konfigurierte Chips werden einfach übersprungen.',
-    discovery_hint: 'Entitäten werden automatisch aus dem Bereich ermittelt – die Auswahlfelder unten überschreiben die Automatik.',
-    discovery_found: 'Automatisch aus dem Bereich erkannt:',
-    discovery_none: 'In diesem Bereich wurden noch keine passenden Entitäten gefunden.',
-    short_light: 'Licht',
+    discovery_hint: 'Beim Auswählen eines Bereichs werden Licht und Sensoren unten automatisch eingetragen – du kannst sie jederzeit anpassen.',
     order_temp: 'Temperatur',
     order_humidity: 'Luftfeuchtigkeit',
     order_co2: 'CO2',
@@ -834,24 +831,8 @@ class NavRoomCardEditor extends HTMLElement {
         .rk-disc-hint {
           font-size: 12px;
           color: var(--secondary-text-color);
-          margin: 4px 0 8px;
+          margin: 4px 0 12px;
           line-height: 1.4;
-        }
-        .rk-disc-result {
-          font-size: 12px;
-          line-height: 1.5;
-          color: var(--primary-text-color);
-          background: rgba(var(--rgb-primary-color, 100,100,255), 0.08);
-          border-left: 3px solid var(--primary-color);
-          border-radius: 6px;
-          padding: 8px 10px;
-          margin-bottom: 14px;
-          word-break: break-all;
-        }
-        .rk-disc-result.empty {
-          color: var(--secondary-text-color);
-          background: none;
-          border-left-color: var(--divider-color);
         }
         .rk-order { margin-top: 20px; }
         .rk-order-title {
@@ -929,10 +910,6 @@ class NavRoomCardEditor extends HTMLElement {
       this._discHint.className = 'rk-disc-hint';
       this.appendChild(this._discHint);
 
-      this._discResult = document.createElement('div');
-      this._discResult.className = 'rk-disc-result';
-      this.appendChild(this._discResult);
-
       this._form = document.createElement('ha-form');
       this._form.computeLabel = (s) => rkT(this._hass, s.name);
       this._form.addEventListener('value-changed', (ev) => {
@@ -940,6 +917,15 @@ class NavRoomCardEditor extends HTMLElement {
         Object.keys(config).forEach((k) => {
           if (config[k] === '' || config[k] === null) delete config[k];
         });
+        // Area changed -> re-run discovery and pre-fill the entity pickers
+        if (config.area && config.area !== this._config.area) {
+          const d = rkDiscover(this._hass, config.area);
+          ['light', 'temp', 'humidity', 'co2'].forEach((k) => {
+            if (d[k]) config[k] = d[k];
+            else delete config[k];
+          });
+          this._matForArea = config.area;
+        }
         // Keep chip_order (managed by the sort list below)
         if (this._config.chip_order) config.chip_order = this._config.chip_order;
         this._fireConfig(config);
@@ -979,40 +965,26 @@ class NavRoomCardEditor extends HTMLElement {
     this._form.hass = this._hass;
     this._form.data = { ...RK_DEFAULTS, ...this._config };
     this._form.schema = rkBuildSchema(this._hass);
-    this._renderDiscovery();
+    this._maybeMaterialize();
     this._renderOrder();
   }
 
-  /* Show what auto-discovery found for the selected area */
-  _renderDiscovery() {
-    const el = this._discResult;
-    if (!el) return;
-    const areaId = this._config.area;
-    if (!this._hass || !areaId) {
-      el.textContent = '';
-      el.style.display = 'none';
-      return;
-    }
-    el.style.display = 'block';
-    const d = rkDiscover(this._hass, areaId);
-    const rows = [];
-    const map = [
-      ['light', 'short_light'],
-      ['temp', 'order_temp'],
-      ['humidity', 'order_humidity'],
-      ['co2', 'order_co2'],
-    ];
-    map.forEach(([key, labelKey]) => {
-      if (this._config[key]) return; // manual override wins, nothing to show
-      if (d[key]) rows.push(`${rkT(this._hass, labelKey)} → ${d[key]}`);
+  /* Pre-fill the pickers when the editor opens with an area but no entities
+     yet (e.g. a freshly added card). Runs once per area. */
+  _maybeMaterialize() {
+    const c = this._config;
+    if (!this._hass || !c.area) return;
+    if (c.light || c.temp || c.humidity || c.co2) return;
+    if (this._matForArea === c.area) return;
+    this._matForArea = c.area;
+    const d = rkDiscover(this._hass, c.area);
+    const filled = {};
+    ['light', 'temp', 'humidity', 'co2'].forEach((k) => {
+      if (d[k]) filled[k] = d[k];
     });
-    if (rows.length) {
-      el.classList.remove('empty');
-      el.textContent = rkT(this._hass, 'discovery_found') + '\n' + rows.join('\n');
-      el.style.whiteSpace = 'pre-line';
-    } else {
-      el.classList.add('empty');
-      el.textContent = rkT(this._hass, 'discovery_none');
+    if (Object.keys(filled).length) {
+      this._fireConfig({ ...c, ...filled });
+      this._form.data = { ...RK_DEFAULTS, ...this._config };
     }
   }
 
