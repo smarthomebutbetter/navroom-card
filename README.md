@@ -1,8 +1,8 @@
 <div align="center">
 
 <picture>
-  <source media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/smarthomebutbetter/navroom-card/main/navroom-banner-light.png">
-  <img alt="NavRoom Card" src="https://raw.githubusercontent.com/smarthomebutbetter/navroom-card/main/navroom-banner.png">
+  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/smarthomebutbetter/navroom-card/main/navroom-banner-dark.png">
+  <img alt="NavRoom Card" src="https://raw.githubusercontent.com/smarthomebutbetter/navroom-card/main/navroom-banner-light.png">
 </picture>
 
 **The room card that glows in the color of your lights.**
@@ -16,10 +16,10 @@ Area-aware · auto-discovering · fully UI-configurable · zero dependencies
 
 | Badge variant | Chip variant |
 |---|---|
-| <picture><source media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/smarthomebutbetter/navroom-card/main/navroom-demo-badge-light.gif"><img alt="Demo badge" src="https://raw.githubusercontent.com/smarthomebutbetter/navroom-card/main/navroom-demo-badge.gif"></picture> | <picture><source media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/smarthomebutbetter/navroom-card/main/navroom-demo-chip-light.gif"><img alt="Demo chip" src="https://raw.githubusercontent.com/smarthomebutbetter/navroom-card/main/navroom-demo-chip.gif"></picture> |
+| <picture><source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/smarthomebutbetter/navroom-card/main/navroom-demo-badge-dark.gif"><img alt="Demo badge" src="https://raw.githubusercontent.com/smarthomebutbetter/navroom-card/main/navroom-demo-badge-light.gif"></picture> | <picture><source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/smarthomebutbetter/navroom-card/main/navroom-demo-chip-dark.gif"><img alt="Demo chip" src="https://raw.githubusercontent.com/smarthomebutbetter/navroom-card/main/navroom-demo-chip-light.gif"></picture> |
 
 *Warm evening light? Warm card. Purple gaming setup? Purple card.*
-*This page adapts to your theme – the previews above are watching you. 🌓*
+*This page adapts to your theme - the previews above follow along.*
 
 </div>
 
@@ -51,7 +51,7 @@ Area-aware · auto-discovering · fully UI-configurable · zero dependencies
 
 | `badge` (default) | `chip` | `pur` |
 |---|---|---|
-| <picture><source media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/smarthomebutbetter/navroom-card/main/navroom-variant-badge-light.png"><img alt="Badge variant" src="https://raw.githubusercontent.com/smarthomebutbetter/navroom-card/main/navroom-variant-badge.png"></picture> | <picture><source media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/smarthomebutbetter/navroom-card/main/navroom-variant-chip-light.png"><img alt="Chip variant" src="https://raw.githubusercontent.com/smarthomebutbetter/navroom-card/main/navroom-variant-chip.png"></picture> | <picture><source media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/smarthomebutbetter/navroom-card/main/navroom-variant-pur-light.png"><img alt="Plain variant" src="https://raw.githubusercontent.com/smarthomebutbetter/navroom-card/main/navroom-variant-pur.png"></picture> |
+| <picture><source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/smarthomebutbetter/navroom-card/main/navroom-variant-badge-dark.png"><img alt="Badge variant" src="https://raw.githubusercontent.com/smarthomebutbetter/navroom-card/main/navroom-variant-badge-light.png"></picture> | <picture><source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/smarthomebutbetter/navroom-card/main/navroom-variant-chip-dark.png"><img alt="Chip variant" src="https://raw.githubusercontent.com/smarthomebutbetter/navroom-card/main/navroom-variant-chip-light.png"></picture> | <picture><source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/smarthomebutbetter/navroom-card/main/navroom-variant-pur-dark.png"><img alt="Plain variant" src="https://raw.githubusercontent.com/smarthomebutbetter/navroom-card/main/navroom-variant-pur-light.png"></picture> |
 | Counter badge on the power button | Lights chip in the status row | No counter at all |
 
 ## 🚀 Installation
