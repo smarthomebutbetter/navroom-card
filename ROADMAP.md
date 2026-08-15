@@ -28,7 +28,18 @@ This document tracks planned features, community requests, and future architectu
 
 ---
 
-### 3. 🚪 Extended Door, Window & Climate State Integration
+### 3. 🔽 Built-in Collapsible Dropdown / Accordion (`collapsible: true`)
+* **Goal:** Integrate collapsible sub-card grid (accordion) natively within the card, eliminating the need for wrapping in external custom cards like `expander-card`.
+* **Design & Structure:**
+  - **Animated Toggle:** Chevron icon on the header that rotates smoothly on state toggle.
+  - **Custom Child Cards:** Support nesting arbitrary Lovelace cards via `cards: [...]` configuration using HA's native `loadCardHelpers()` and `createCardElement()`.
+  - **Auto-Populated Grid:** Support an `auto_entities: true` mode which automatically finds all active devices/lights in the area and displays them in a 2-column grid layout of standard Tile cards.
+* **Priority:** Medium
+* **Status:** 📝 Research & Architecture Approved
+
+---
+
+### 4. 🚪 Extended Door, Window & Climate State Integration
 * **Goal:** Support summary badges for open doors/windows within the area (e.g. `1 open`) or active HVAC states.
 * **Priority:** Low / Backlog
 * **Status:** 💡 Backlog
