@@ -33,7 +33,7 @@
  * https://github.com/smarthomebutbetter/navroom-card
  */
 
-const RK_VERSION = '2.2.0';
+const RK_VERSION = '2.3.0';
 
 const RK_DEFAULTS = {
   variant: 'badge',
