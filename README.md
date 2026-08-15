@@ -41,7 +41,7 @@ Area-aware · auto-discovering · fully UI-configurable · zero dependencies
   separate action for the power button.
 - 🖥️ **Full visual editor** – area picker, filtered entity pickers, design
   sliders, reset button, live preview. Zero YAML required.
-- 🌍 **i18n** – English & German, auto-detected from the user profile.
+- 🌍 **i18n** – English, German, Swedish, Danish, Norwegian, Finnish & Icelandic, auto-detected from the user profile.
 - ⚡ **Vanilla JavaScript** – no build step, no dependencies, one file.
 
 ## 🃏 Variants
