@@ -1,7 +1,12 @@
 /**
- * NavRoom Card – Custom Lovelace Card (v2.1.0)
+ * NavRoom Card – Custom Lovelace Card (v2.3.0)
  * Room overview card with area icon, light-color accent, power button,
  * sortable sensor chips (temperature, humidity, CO2) and three layout variants.
+ *
+ * v2.3.0:
+ *  - Added translation support for Nordic languages (Swedish, Danish,
+ *    Norwegian, Finnish, Icelandic).
+ *  - Improved locale detection and dynamic error messages.
  *
  * v2.2.0:
  *  - Selecting an area in the editor now pre-fills the light and sensor
