@@ -1,7 +1,13 @@
 /**
- * NavRoom Card – Custom Lovelace Card (v2.1.0)
+ * NavRoom Card – Custom Lovelace Card (v2.3.0)
  * Room overview card with area icon, light-color accent, power button,
  * sortable sensor chips (temperature, humidity, CO2) and three layout variants.
+ *
+ * v2.3.0:
+ *  - Added `ignore_light_color` option: when enabled, the card always uses
+ *    `accent_fallback` instead of the light's real color (fixes low-contrast
+ *    white icons on light themes).
+ *  - Added full Brazilian Portuguese (pt-BR) translation.
  *
  * v2.2.0:
  *  - Selecting an area in the editor now pre-fills the light and sensor
@@ -33,7 +39,7 @@
  * https://github.com/smarthomebutbetter/navroom-card
  */
 
-const RK_VERSION = '2.2.0';
+const RK_VERSION = '2.3.0';
 
 const RK_DEFAULTS = {
   variant: 'badge',
@@ -54,13 +60,14 @@ const RK_DEFAULTS = {
   badge_size: 18,
   bg_tint: 0.10,
   accent_fallback: '255,183,77',
+  ignore_light_color: false,
 };
 
 const RK_DESIGN_KEYS = [
   'height', 'radius', 'padding', 'head_height', 'row_gap', 'icon_size',
   'name_size', 'name_weight', 'chip_height', 'chip_font', 'chip_pad',
   'chip_gap', 'pwr_size', 'pwr_icon', 'badge_size', 'bg_tint',
-  'accent_fallback', 'chip_order',
+  'accent_fallback', 'ignore_light_color', 'chip_order',
 ];
 
 const RK_VARIANTS = ['badge', 'chip', 'pur'];
@@ -99,6 +106,7 @@ const RK_I18N = {
     badge_size: 'Badge size',
     bg_tint: 'Background tint (0–0.4)',
     accent_fallback: 'Fallback color (R,G,B)',
+    ignore_light_color: 'Ignore light color (always use fallback)',
     section_interaction: 'Interactions',
     section_overrides: 'Overrides (optional)',
     section_design: 'Design',
@@ -142,6 +150,7 @@ const RK_I18N = {
     badge_size: 'Badge',
     bg_tint: 'Hintergrund-Einfärbung (0–0,4)',
     accent_fallback: 'Fallback-Farbe (R,G,B)',
+    ignore_light_color: 'Lichtfarbe ignorieren (immer Fallback nutzen)',
     section_interaction: 'Interaktion',
     section_overrides: 'Überschreiben (optional)',
     section_design: 'Design',
@@ -159,11 +168,58 @@ const RK_I18N = {
     error_area: 'Bitte einen Bereich wählen oder einen Namen setzen.',
     card_description: 'Raumübersicht mit Auto-Discovery pro Bereich, Lichtfarben-Akzent, konfigurierbarem Power-Button, sortierbaren Sensor-Chips und drei Layout-Varianten.',
   },
+  pt: {
+    area: 'Área',
+    light: 'Luz (grupo ou luz única)',
+    temp: 'Sensor de temperatura',
+    humidity: 'Sensor de umidade',
+    co2: 'Sensor de CO2',
+    variant: 'Variante',
+    variant_badge: 'Contador no botão de energia',
+    variant_chip: 'Chip de luzes na linha de status',
+    variant_pur: 'Simples – sem contador',
+    tap_action: 'Cartão: toque',
+    hold_action: 'Cartão: pressionar e segurar',
+    double_tap_action: 'Cartão: toque duplo',
+    power_action: 'Botão de energia: toque',
+    name: 'Substituir nome',
+    icon: 'Substituir ícone',
+    height: 'Altura do cartão',
+    radius: 'Raio das bordas',
+    icon_size: 'Tamanho do ícone',
+    name_size: 'Tamanho do nome',
+    chip_height: 'Altura do chip',
+    chip_font: 'Tamanho da fonte do chip',
+    pwr_size: 'Tamanho do botão de energia',
+    badge_size: 'Tamanho do contador',
+    bg_tint: 'Tonalidade do fundo (0–0,4)',
+    accent_fallback: 'Cor reserva (R,G,B)',
+    ignore_light_color: 'Ignorar cor da luz (sempre usar cor reserva)',
+    section_interaction: 'Interações',
+    section_overrides: 'Substituições (opcional)',
+    section_design: 'Design',
+    order_title: 'Ordem dos chips',
+    order_hint: 'Ordene com as setas – chips sem sensor configurado são simplesmente ignorados.',
+    discovery_hint: 'Ao selecionar uma área, a luz e os sensores abaixo são preenchidos automaticamente – ajuste quando quiser.',
+    order_temp: 'Temperatura',
+    order_humidity: 'Umidade',
+    order_co2: 'CO2',
+    order_light: 'Chip de luzes',
+    reset: 'Redefinir design',
+    off: 'Desligado',
+    one_light: '1 luz',
+    n_lights: '{n} luzes',
+    error_area: 'Selecione uma área ou defina um nome.',
+    card_description: 'Visão geral do cômodo com descoberta automática por área, destaque de cor da luz, botão de energia configurável, chips de sensores ordenáveis e três variantes de layout.',
+  },
 };
 
 function rkLang(hass) {
   const l = (hass && hass.locale && hass.locale.language) || (hass && hass.language) || 'en';
-  return String(l).toLowerCase().startsWith('de') ? 'de' : 'en';
+  const lang = String(l).toLowerCase();
+  if (lang.startsWith('pt')) return 'pt';
+  if (lang.startsWith('de')) return 'de';
+  return 'en';
 }
 
 function rkT(hass, key) {
@@ -244,7 +300,7 @@ class NavRoomCard extends HTMLElement {
 
   setConfig(config) {
     if (!config || (!config.area && !config.name)) {
-      throw new Error(RK_I18N.en.error_area + ' / ' + RK_I18N.de.error_area);
+      throw new Error(RK_I18N.en.error_area + ' / ' + RK_I18N.de.error_area + ' / ' + RK_I18N.pt.error_area);
     }
     this._userKeys = new Set(Object.keys(config));
     this._c = { ...RK_DEFAULTS, ...config };
@@ -634,7 +690,10 @@ class NavRoomCard extends HTMLElement {
       }
     }
     let accent = c.accent_fallback;
-    if (cols.length) {
+    // When `ignore_light_color` is enabled, always use the fallback color,
+    // regardless of the actual light color (fixes white-on-white contrast
+    // issues on light themes).
+    if (!c.ignore_light_color && cols.length) {
       accent = [0, 1, 2]
         .map((i) => Math.round(cols.reduce((a, x) => a + x[i], 0) / cols.length))
         .join(',');
@@ -679,7 +738,7 @@ class NavRoomCard extends HTMLElement {
   _fmt(state, decimals, unit) {
     const v = state ? parseFloat(state.state) : NaN;
     if (isNaN(v)) return '–';
-    const sep = rkLang(this._hass) === 'de' ? ',' : '.';
+    const sep = rkLang(this._hass) === 'de' ? ',' : (rkLang(this._hass) === 'pt' ? ',' : '.');
     const s = decimals > 0
       ? v.toFixed(decimals).replace('.', sep)
       : String(Math.round(v));
@@ -782,6 +841,7 @@ function rkBuildSchema(hass) {
         },
         { name: 'bg_tint', selector: { number: { min: 0, max: 0.4, step: 0.01, mode: 'slider' } } },
         { name: 'accent_fallback', selector: { text: {} } },
+        { name: 'ignore_light_color', selector: { boolean: {} } },
       ],
     },
   ];
