@@ -41,14 +41,14 @@ Area-aware · auto-discovering · fully UI-configurable · zero dependencies
   separate action for the power button.
 - 🖥️ **Full visual editor** – area picker, filtered entity pickers, design
   sliders, reset button, live preview. Zero YAML required.
-- 🌍 **i18n** – English & German, auto-detected from the user profile.
+- 🌍 **i18n** – English, German, and **Brazilian Portuguese**, auto-detected from the user profile.
 - ⚡ **Vanilla JavaScript** – no build step, no dependencies, one file.
 
 ## 🃏 Variants
 
 | `badge` (default) | `chip` | `pur` |
 |---|---|---|
-| <picture><source media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/smarthomebutbetter/navroom-card/main/navroom-variant-badge-light.png"><img alt="Badge variant" src="https://raw.githubusercontent.com/smarthomebutbetter/navroom-card/main/navroom-variant-badge-dark.png"></picture> | <picture><source media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/smarthomebutbetter/navroom-card/main/navroom-variant-chip-light.png"><img alt="Chip variant" src="https://raw.githubusercontent.com/smarthomebutbetter/navroom-card/main/navroom-variant-chip-dark.png"></picture> | <picture><source media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/smarthomebutbetter/navroom-card/main/navroom-variant-pur-light.png"><img alt="Plain variant" src="https://raw.githubusercontent.com/smarthomebutbetter/navroom-card/main/navroom-variant-pur-dark.png"></picture> |
+| <picture><source media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/smarthomebutbetter/navroom-card/main/navroom-variant-badge-light.png"><img alt="Badge variant" src="https://raw.githubusercontent.com/smarthomebutbetter/navroom-card/main/navroom-variant-badge-dark.png"></picture> | <picture><source media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/smarthomebutbetter/navroom-card/main/navroom-variant-chip-light.png"><img alt="Demo chip" src="https://raw.githubusercontent.com/smarthomebutbetter/navroom-card/main/navroom-variant-chip-dark.png"></picture> | <picture><source media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/smarthomebutbetter/navroom-card/main/navroom-variant-pur-light.png"><img alt="Plain variant" src="https://raw.githubusercontent.com/smarthomebutbetter/navroom-card/main/navroom-variant-pur-dark.png"></picture> |
 | Counter badge on the power button | Lights chip in the status row | No counter at all |
 
 ## 🚀 Installation
@@ -113,6 +113,8 @@ hold_action:
   action: more-info
 power_action:
   action: toggle
+ignore_light_color: true # New option: force accent_fallback instead of light's color
+accent_fallback: '255,183,77' # Example fallback color
 ```
 
 </details>
@@ -133,7 +135,9 @@ power_action:
 | `double_tap_action` | action | – | Card double tap |
 | `power_action` | action | toggle light | Power button tap |
 | `name` / `icon` | string | from area | Manual overrides |
-| `height`, `radius`, `icon_size`, `name_size`, `chip_height`, `chip_font`, `pwr_size`, `badge_size`, `bg_tint`, `accent_fallback` | number/string | see editor | Design options (unset values adapt to the theme) |
+| `height`, `radius`, `icon_size`, `name_size`, `chip_height`, `chip_font`, `pwr_size`, `badge_size`, `bg_tint` | number/string | see editor | Design options (unset values adapt to the theme) |
+| `accent_fallback` | string | `255,183,77` | Fallback color (R,G,B) for accent elements |
+| `ignore_light_color` | boolean | `false` | If `true`, always use `accent_fallback` instead of the light's actual color. |
 
 ## ❓ FAQ
 
@@ -161,6 +165,17 @@ are skipped.
 The card follows the active theme by default. If you want a specific look
 regardless of theme, set the corner radius (and friends) explicitly in the
 Design section of the editor.
+
+</details>
+
+<details>
+<summary><b>My light icon/power button disappears on light themes when the light is white. How do I fix this?</b></summary>
+
+This is a known issue (see #1). To fix it, enable the `ignore_light_color`
+option in the card's visual editor (under the "Design" section). This will
+force the card to always use the `accent_fallback` color for the icon,
+power button, badge, and background tint, ensuring visibility regardless
+of the light's actual color.
 
 </details>
 
