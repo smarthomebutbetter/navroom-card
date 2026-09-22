@@ -17,6 +17,15 @@
  *    red with a pulsing alarm icon.
  *  - Humidity warning: chip turns yellow from 65 %, orange from 70 %.
  *  - Optional area picture as card background (`show_picture`).
+ *  - Presence dot on the room icon (occupancy/presence/motion sensor).
+ *  - New chips: media playing, blinds position, room mode, room power,
+ *    "ventilate" hint (high humidity/CO2 with all windows closed).
+ *  - Windows chip turns orange when the thermostat heats with a window open.
+ *  - Maintenance indicators: low battery and offline devices in the room.
+ *  - Chip pages: at most `max_chips` (default 3) chips per row, justified or
+ *    left-aligned (`chip_align`). More chips are split into balanced pages
+ *    (4 -> 2+2, 5 -> 3+2) that gently cross-fade every `chip_rotate`
+ *    seconds (default 6, 0 = off). No sideways scrolling any more.
  *  - Swedish, Danish, Norwegian, Finnish and Icelandic translations.
  *    Thanks @adnansarajlic (#3)
  *
@@ -90,6 +99,11 @@ const RK_DEFAULTS = {
   haptics: true,
   auto_contrast: true,
   show_picture: false,
+  show_battery: true,
+  show_offline: true,
+  max_chips: 3,
+  chip_rotate: 6,
+  chip_align: 'justify',
 };
 
 const RK_DESIGN_KEYS = [
@@ -97,10 +111,11 @@ const RK_DESIGN_KEYS = [
   'name_size', 'name_weight', 'chip_height', 'chip_font', 'chip_pad',
   'chip_gap', 'pwr_size', 'pwr_icon', 'badge_size', 'bg_tint',
   'accent_fallback', 'ignore_light_color', 'auto_contrast', 'show_picture', 'chip_order',
+  'max_chips', 'chip_rotate', 'chip_align',
 ];
 
 const RK_VARIANTS = ['badge', 'chip', 'pur'];
-const RK_CHIP_ORDER_DEFAULT = ['temp', 'humidity', 'co2', 'climate', 'windows', 'light'];
+const RK_CHIP_ORDER_DEFAULT = ['temp', 'humidity', 'windows', 'vent', 'climate', 'co2', 'media', 'covers', 'mode', 'power', 'light'];
 const RK_HOLD_MS = 500;
 const RK_DBL_MS = 250;
 const RK_CO2_WARN = 1000;
@@ -109,6 +124,11 @@ const RK_HUM_WARN = 65;
 const RK_HUM_ALERT = 70;
 const RK_WINDOW_DC = ['window', 'door', 'garage_door'];
 const RK_ALARM_DC = ['smoke', 'heat', 'gas', 'carbon_monoxide', 'moisture'];
+const RK_PRESENCE_DC = ['occupancy', 'presence', 'motion'];
+const RK_BATTERY_LOW = 15;
+const RK_VENT_CO2 = 1000;
+const RK_SLOT_MIN = 64;
+const RK_FADE_MS = 700;
 
 /* ------------------------------ i18n ------------------------------ */
 
@@ -134,6 +154,28 @@ const RK_I18N = {
     order_windows: 'Windows',
     n_open: '{n} open',
     heat_off: 'Off',
+    presence: 'Presence / motion sensor',
+    media: 'Media players',
+    covers: 'Blinds / covers',
+    mode: 'Room mode (select)',
+    power: 'Power sensors',
+    show_battery: 'Show low battery',
+    show_offline: 'Show offline devices',
+    order_vent: 'Ventilate hint',
+    order_media: 'Media',
+    order_covers: 'Blinds',
+    order_mode: 'Mode',
+    order_power: 'Power',
+    open_heating: '{n} open · heating',
+    ventilate: 'Ventilate',
+    closed: 'Closed',
+    battery_low: 'Low battery',
+    max_chips: 'Max. chips side by side',
+    chip_rotate: 'Next chips every',
+    chip_align: 'Chip alignment',
+    align_justify: 'Justified',
+    align_left: 'Left',
+    offline_n: '{n} offline',
     light: 'Light (group or single light)',
     temp: 'Temperature sensor',
     humidity: 'Humidity sensor',
@@ -197,6 +239,28 @@ const RK_I18N = {
     order_windows: 'Fenster',
     n_open: '{n} offen',
     heat_off: 'Aus',
+    presence: 'Präsenz- / Bewegungsmelder',
+    media: 'Mediaplayer',
+    covers: 'Rollos / Beschattung',
+    mode: 'Raum-Modus (Auswahl)',
+    power: 'Leistungssensoren',
+    show_battery: 'Schwache Batterie anzeigen',
+    show_offline: 'Offline-Geräte anzeigen',
+    order_vent: 'Lüften-Hinweis',
+    order_media: 'Medien',
+    order_covers: 'Rollos',
+    order_mode: 'Modus',
+    order_power: 'Leistung',
+    open_heating: '{n} offen · Heizung an',
+    ventilate: 'Lüften',
+    closed: 'Zu',
+    battery_low: 'Batterie schwach',
+    max_chips: 'Max. Chips nebeneinander',
+    chip_rotate: 'Nächste Chips alle',
+    chip_align: 'Chip-Ausrichtung',
+    align_justify: 'Blocksatz',
+    align_left: 'Linksbündig',
+    offline_n: '{n} offline',
     light: 'Licht (Gruppe oder Einzellicht)',
     temp: 'Temperatursensor',
     humidity: 'Luftfeuchtigkeitssensor',
@@ -260,6 +324,28 @@ const RK_I18N = {
     order_windows: 'Janelas',
     n_open: '{n} abertas',
     heat_off: 'Desligado',
+    presence: 'Sensor de presença / movimento',
+    media: 'Reprodutores de mídia',
+    covers: 'Persianas',
+    mode: 'Modo do cômodo (seleção)',
+    power: 'Sensores de potência',
+    show_battery: 'Mostrar bateria fraca',
+    show_offline: 'Mostrar dispositivos offline',
+    order_vent: 'Aviso de ventilação',
+    order_media: 'Mídia',
+    order_covers: 'Persianas',
+    order_mode: 'Modo',
+    order_power: 'Potência',
+    open_heating: '{n} abertas · aquecendo',
+    ventilate: 'Ventilar',
+    closed: 'Fechado',
+    battery_low: 'Bateria fraca',
+    max_chips: 'Máx. de chips lado a lado',
+    chip_rotate: 'Próximos chips a cada',
+    chip_align: 'Alinhamento dos chips',
+    align_justify: 'Justificado',
+    align_left: 'À esquerda',
+    offline_n: '{n} offline',
     light: 'Luz (grupo ou luz única)',
     temp: 'Sensor de temperatura',
     humidity: 'Sensor de umidade',
@@ -552,14 +638,30 @@ function rkDiscover(hass, areaId) {
   let climate = null;
   const windows = [];
   const alarms = [];
+  const presence = [];
+  const media = [];
+  const covers = [];
+  const power = [];
+  const all = [];
 
   Object.values(hass.entities).forEach((e) => {
-    if (e.disabled_by || e.hidden_by || e.entity_category) return;
+    if (e.disabled_by || e.hidden_by) return;
     if (!inArea(e)) return;
     const id = e.entity_id;
     const st = hass.states[id];
     if (!st) return;
+    // every visible entity of the room (incl. diagnostics) – for battery / offline
+    all.push(id);
+    if (e.entity_category) return;
     const domain = id.split('.')[0];
+    if (domain === 'media_player') {
+      media.push(id);
+      return;
+    }
+    if (domain === 'cover') {
+      covers.push(st);
+      return;
+    }
     if (domain === 'light') {
       lights.push(st);
       return;
@@ -572,6 +674,7 @@ function rkDiscover(hass, areaId) {
       const bdc = st.attributes && st.attributes.device_class;
       if (RK_WINDOW_DC.includes(bdc)) windows.push(id);
       else if (RK_ALARM_DC.includes(bdc)) alarms.push(id);
+      else if (RK_PRESENCE_DC.includes(bdc)) presence.push({ id, dc: bdc });
       return;
     }
     if (domain === 'sensor') {
@@ -579,6 +682,7 @@ function rkDiscover(hass, areaId) {
       if (dc === 'temperature' && !temp) temp = id;
       else if (dc === 'humidity' && !humidity) humidity = id;
       else if (dc === 'carbon_dioxide' && !co2) co2 = id;
+      else if (dc === 'power') power.push(id);
     }
   });
 
@@ -594,7 +698,17 @@ function rkDiscover(hass, areaId) {
     light = lights[0].entity_id;
   }
 
-  return { light, temp, humidity, co2, climate, windows, alarms };
+  // Presence: occupancy/presence beats motion
+  presence.sort((a, b) => RK_PRESENCE_DC.indexOf(a.dc) - RK_PRESENCE_DC.indexOf(b.dc));
+  // Blinds: a cover group replaces its members
+  const coverGroups = covers.filter((c) => c.attributes && Array.isArray(c.attributes.entity_id) && c.attributes.entity_id.length);
+  const coverIds = coverGroups.length ? [coverGroups[0].entity_id] : covers.map((c) => c.entity_id);
+
+  return {
+    light, temp, humidity, co2, climate, windows, alarms,
+    presence: presence.length ? presence[0].id : null,
+    media, covers: coverIds, power, all,
+  };
 }
 
 /* ------------------------------ Card ------------------------------ */
@@ -628,6 +742,7 @@ class NavRoomCard extends HTMLElement {
     this._discFor = null;
     this._built = false;
     if (this._hass) this._build();
+    if (this.isConnected) this._startRotation();
   }
 
   set hass(hass) {
@@ -679,6 +794,12 @@ class NavRoomCard extends HTMLElement {
       climate: pick('climate'),
       windows: list('windows'),
       alarms: list('alarms'),
+      presence: pick('presence'),
+      mode: c.mode && c.mode !== 'none' ? c.mode : '',
+      media: list('media'),
+      covers: list('covers'),
+      power: list('power'),
+      all: Array.isArray(d.all) ? d.all : (this._discover().all || []),
     };
   }
 
@@ -703,7 +824,9 @@ class NavRoomCard extends HTMLElement {
     if (e.humidity) ids.push(e.humidity);
     if (e.co2) ids.push(e.co2);
     if (e.climate) ids.push(e.climate);
-    ids.push(...e.windows, ...e.alarms);
+    if (e.presence) ids.push(e.presence);
+    if (e.mode) ids.push(e.mode);
+    ids.push(...e.windows, ...e.alarms, ...e.media, ...e.covers, ...e.power, ...e.all);
     return ids;
   }
 
@@ -753,6 +876,33 @@ class NavRoomCard extends HTMLElement {
           align-items: center;
           justify-content: space-between;
         }
+        .icwrap {
+          position: relative;
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          min-width: 0;
+        }
+        #pres {
+          position: absolute;
+          left: ${Math.round(c.icon_size - 5)}px;
+          top: -2px;
+          width: 9px;
+          height: 9px;
+          border-radius: 50%;
+          background: var(--success-color, #43a047);
+          box-shadow: 0 0 0 2px var(--ha-card-background, var(--card-background-color));
+          display: none;
+        }
+        #pres.show { display: block; }
+        #ind {
+          display: flex;
+          align-items: center;
+          gap: 4px;
+        }
+        #ind ha-icon { --mdc-icon-size: 16px; }
+        #ind .bat { color: var(--rk-c-open); }
+        #ind .off { color: var(--secondary-text-color); opacity: 0.8; }
         #ic {
           --mdc-icon-size: ${c.icon_size}px;
           color: var(--secondary-text-color);
@@ -815,15 +965,25 @@ class NavRoomCard extends HTMLElement {
           display: flex;
           align-items: center;
           gap: ${c.chip_gap}px;
-          min-height: ${c.chip_height}px;
-          overflow-x: auto;
-          overflow-y: hidden;
-          scrollbar-width: none;
-          -ms-overflow-style: none;
-          margin-right: -${c.padding}px;
-          padding-right: ${c.padding}px;
+          height: ${c.chip_height}px;
+          min-width: 0;
         }
-        #chips::-webkit-scrollbar { display: none; }
+        #chips { transition: opacity ${RK_FADE_MS}ms ease; }
+        #chips.fade { opacity: 0; }
+        .slot {
+          flex: 1 1 0;
+          min-width: 0;
+          display: flex;
+        }
+        .slot .chip { width: 100%; min-width: 0; box-sizing: border-box; }
+        #chips.left .slot { flex: 0 1 auto; }
+        #chips.left .slot .chip { width: auto; }
+        .chip .tx {
+          min-width: 0;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
         .chip {
           flex: 0 0 auto;
           display: inline-flex;
@@ -844,6 +1004,7 @@ class NavRoomCard extends HTMLElement {
         .chip ha-icon {
           --mdc-icon-size: ${chipIcon}px;
           margin-left: -2px;
+          flex: 0 0 auto;
         }
         .chip.hot {
           color: rgb(var(--rk-accent));
@@ -857,14 +1018,23 @@ class NavRoomCard extends HTMLElement {
           color: #ff7043;
           background: rgba(255, 112, 67, 0.18);
         }
-        .chip.info {
-          color: #4fa9e6;
-          background: rgba(79, 169, 230, 0.16);
+        .chip.open {
+          color: var(--rk-c-open);
+          background: rgba(255, 193, 7, 0.18);
         }
-        .chip.heat {
-          color: #ff8a65;
-          background: rgba(255, 138, 101, 0.16);
+        .chip.wet {
+          color: var(--rk-c-wet);
+          background: rgba(3, 169, 244, 0.14);
         }
+        .chip.wet2 {
+          color: var(--rk-c-wet);
+          background: rgba(3, 169, 244, 0.26);
+        }
+        .chip.heat, .chip.conflict {
+          color: var(--rk-c-heat);
+          background: rgba(255, 87, 34, 0.15);
+        }
+        .chip.conflict { font-weight: 700; }
         ha-card.pic {
           background:
             linear-gradient(var(--rk-overlay), var(--rk-overlay)),
@@ -892,11 +1062,16 @@ class NavRoomCard extends HTMLElement {
         @media (prefers-reduced-motion: reduce) {
           ha-card, #pwr, #ic, .chip { transition: none; }
           ha-card.alarm #ic { animation: none; }
+          #chips { transition: none; }
         }
       </style>
       <ha-card>
         <div class="head">
-          <ha-icon id="ic"></ha-icon>
+          <div class="icwrap">
+            <ha-icon id="ic"></ha-icon>
+            <span id="pres"></span>
+            <div id="ind"></div>
+          </div>
           <button id="pwr" aria-label="Toggle light">
             <ha-icon icon="mdi:power"></ha-icon>
             <span id="badge"></span>
@@ -910,6 +1085,8 @@ class NavRoomCard extends HTMLElement {
     this._el = {
       card: this.shadowRoot.querySelector('ha-card'),
       ic: this.shadowRoot.getElementById('ic'),
+      pres: this.shadowRoot.getElementById('pres'),
+      ind: this.shadowRoot.getElementById('ind'),
       pwr: this.shadowRoot.getElementById('pwr'),
       badge: this.shadowRoot.getElementById('badge'),
       name: this.shadowRoot.getElementById('name'),
@@ -1030,6 +1207,9 @@ class NavRoomCard extends HTMLElement {
     // Theme-independent neutral tones (dark/light)
     const dark = !!(hass.themes && hass.themes.darkMode);
     el.card.style.setProperty('--rk-neutral', dark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)');
+    el.card.style.setProperty('--rk-c-open', dark ? 'var(--amber-color, #ffc107)' : '#a87800');
+    el.card.style.setProperty('--rk-c-wet', dark ? 'var(--light-blue-color, #03a9f4)' : '#0277bd');
+    el.card.style.setProperty('--rk-c-heat', dark ? 'var(--deep-orange-color, #ff5722)' : '#d84315');
     // Subtle depth for the power button – keeps it visible on light themes
     // even when the accent color is very bright
     el.card.style.setProperty(
@@ -1053,6 +1233,35 @@ class NavRoomCard extends HTMLElement {
       el.card.style.setProperty('--rk-pic', `url("${String(pic).replace(/"/g, '%22')}")`);
       el.card.style.setProperty('--rk-overlay', dark ? 'rgba(18,18,22,0.62)' : 'rgba(255,255,255,0.74)');
     }
+
+    // Presence dot
+    const pst = eff.presence ? hass.states[eff.presence] : null;
+    el.pres.classList.toggle('show', !!(pst && pst.state === 'on'));
+
+    // Maintenance indicators: low battery / offline devices
+    let ind = '';
+    if (c.show_battery !== false) {
+      const low = eff.all.filter((id) => {
+        const s = hass.states[id];
+        const dc = s && s.attributes && s.attributes.device_class;
+        if (dc !== 'battery') return false;
+        if (id.startsWith('binary_sensor.')) return s.state === 'on';
+        const v = parseFloat(s.state);
+        return !isNaN(v) && v < RK_BATTERY_LOW;
+      });
+      if (low.length) ind += `<ha-icon class="bat" icon="mdi:battery-alert-variant-outline" title="${rkT(hass, 'battery_low')}"></ha-icon>`;
+    }
+    if (c.show_offline !== false) {
+      const devs = new Set();
+      eff.all.forEach((id) => {
+        const s = hass.states[id];
+        if (!s || s.state !== 'unavailable') return;
+        const reg = hass.entities && hass.entities[id];
+        devs.add((reg && reg.device_id) || id);
+      });
+      if (devs.size) ind += `<ha-icon class="off" icon="mdi:lan-disconnect" title="${rkT(hass, 'offline_n').replace('{n}', devs.size)}"></ha-icon>`;
+    }
+    if (el.ind.innerHTML !== ind) el.ind.innerHTML = ind;
 
     // Light state & accent color (average of RGB colors of lights that are on)
     const light = eff.light ? hass.states[eff.light] : null;
@@ -1104,8 +1313,8 @@ class NavRoomCard extends HTMLElement {
     if (eff.humidity) {
       const hv = hass.states[eff.humidity] ? parseFloat(hass.states[eff.humidity].state) : NaN;
       let hcls = '';
-      if (!isNaN(hv) && hv >= RK_HUM_ALERT) hcls = 'alert';
-      else if (!isNaN(hv) && hv >= RK_HUM_WARN) hcls = 'warn';
+      if (!isNaN(hv) && hv >= RK_HUM_ALERT) hcls = 'wet2';
+      else if (!isNaN(hv) && hv >= RK_HUM_WARN) hcls = 'wet';
       defs.humidity = { icon: 'mdi:water-percent', t: this._fmt(hass.states[eff.humidity], 0, '%'), cls: hcls };
     }
     if (eff.climate && hass.states[eff.climate]) {
@@ -1114,14 +1323,69 @@ class NavRoomCard extends HTMLElement {
       const heating = cs.attributes && cs.attributes.hvac_action === 'heating';
       const target = cs.attributes ? cs.attributes.temperature : undefined;
       defs.climate = {
-        icon: off ? 'mdi:radiator-off' : 'mdi:radiator',
+        icon: 'mdi:thermostat',
         t: off ? rkT(hass, 'heat_off') : this._fmt({ state: target }, 1, '°'),
         cls: heating ? 'heat' : '',
       };
     }
     const open = eff.windows.filter((id) => hass.states[id] && hass.states[id].state === 'on').length;
+    const cst = eff.climate ? hass.states[eff.climate] : null;
+    const heatingOn = !!(cst && (cst.state === 'heat' || (cst.attributes && cst.attributes.hvac_action === 'heating')));
     if (open > 0) {
-      defs.windows = { icon: 'mdi:window-open-variant', t: rkT(hass, 'n_open').replace('{n}', open), cls: 'info' };
+      defs.windows = heatingOn
+        ? { icon: 'mdi:window-open-variant', t: rkT(hass, 'open_heating').replace('{n}', open), cls: 'conflict' }
+        : { icon: 'mdi:window-open-variant', t: rkT(hass, 'n_open').replace('{n}', open), cls: 'open' };
+    }
+    // Ventilate hint: stuffy air and every window closed
+    {
+      const hv = eff.humidity && hass.states[eff.humidity] ? parseFloat(hass.states[eff.humidity].state) : NaN;
+      const cv = eff.co2 && hass.states[eff.co2] ? parseFloat(hass.states[eff.co2].state) : NaN;
+      const stuffy = (!isNaN(hv) && hv >= RK_HUM_ALERT) || (!isNaN(cv) && cv >= RK_VENT_CO2);
+      if (stuffy && open === 0) defs.vent = { icon: 'mdi:weather-windy', t: rkT(hass, 'ventilate'), cls: 'wet' };
+    }
+    // Media playing
+    {
+      const playing = eff.media.map((id) => hass.states[id]).find((s) => s && s.state === 'playing');
+      if (playing) {
+        const nm = (playing.attributes && playing.attributes.friendly_name) || playing.entity_id;
+        defs.media = { icon: 'mdi:play', t: nm, cls: 'hot' };
+      }
+    }
+    // Blinds: only when not fully open
+    {
+      const cs = eff.covers.map((id) => hass.states[id]).filter((s) => s && s.state !== 'unavailable');
+      if (cs.length) {
+        const pos = cs.map((s) => (s.attributes && typeof s.attributes.current_position === 'number')
+          ? s.attributes.current_position : (s.state === 'closed' ? 0 : 100));
+        const avg = Math.round(pos.reduce((a, b) => a + b, 0) / pos.length);
+        if (avg < 100) {
+          defs.covers = avg === 0
+            ? { icon: 'mdi:roller-shade-closed', t: rkT(hass, 'closed'), cls: '' }
+            : { icon: 'mdi:roller-shade', t: avg + ' %', cls: '' };
+        }
+      }
+    }
+    // Room mode
+    if (eff.mode && hass.states[eff.mode]) {
+      const m = hass.states[eff.mode].state;
+      if (!['aus', 'off', 'none', 'unknown', 'unavailable', ''].includes(String(m).toLowerCase())) {
+        defs.mode = { icon: 'mdi:tune-variant', t: m, cls: '' };
+      }
+    }
+    // Room power
+    {
+      let w = 0;
+      eff.power.forEach((id) => {
+        const s = hass.states[id];
+        const v = s ? parseFloat(s.state) : NaN;
+        if (isNaN(v)) return;
+        const unit = s.attributes && s.attributes.unit_of_measurement;
+        w += unit === 'kW' ? v * 1000 : v;
+      });
+      if (w >= 1) {
+        const txt = w >= 1000 ? this._fmt({ state: w / 1000 }, 1, ' kW') : Math.round(w) + ' W';
+        defs.power = { icon: 'mdi:flash', t: txt, cls: '' };
+      }
     }
     if (eff.co2) {
       const v = hass.states[eff.co2] ? parseFloat(hass.states[eff.co2].state) : NaN;
@@ -1137,11 +1401,90 @@ class NavRoomCard extends HTMLElement {
       else t = rkT(hass, 'n_lights').replace('{n}', count);
       defs.light = { icon: 'mdi:lightbulb-outline', t, cls: count > 0 ? 'hot' : '' };
     }
-    const chips = this._chipOrder().map((k) => defs[k]).filter(Boolean);
+    this._chipList = this._chipOrder().filter((k) => defs[k]).map((k) => ({ k, ...defs[k] }));
+    this._layoutChips(false);
+  }
 
-    el.chips.innerHTML = chips
-      .map((x) => `<span class="chip${x.cls ? ' ' + x.cls : ''}"><ha-icon icon="${x.icon}"></ha-icon>${x.t}</span>`)
-      .join('');
+  /* ---------- Chip slots ---------- */
+
+  _chipHtml(x) {
+    return `<div class="slot"><span class="chip${x.cls ? ' ' + x.cls : ''}" data-k="${x.k}"><ha-icon icon="${x.icon}"></ha-icon><span class="tx">${x.t}</span></span></div>`;
+  }
+
+  /* At most `max_chips` per page (fewer on narrow cards). More chips are split
+     into balanced pages which cross-fade gently. */
+  _pageItems() {
+    const box = this._el.chips;
+    const list = this._chipList || [];
+    const c = this._c;
+    const W = box.clientWidth;
+    const max = Math.max(1, parseInt(c.max_chips, 10) || 3);
+    const byWidth = W ? Math.max(1, Math.floor((W + c.chip_gap) / (RK_SLOT_MIN + c.chip_gap))) : max;
+    const per = Math.max(1, Math.min(max, byWidth));
+    const pages = Math.max(1, Math.ceil(list.length / per));
+    const base = Math.floor(list.length / pages);
+    const extra = list.length % pages;
+    const bounds = [];
+    let from = 0;
+    for (let p = 0; p < pages; p++) {
+      const size = base + (p < extra ? 1 : 0);
+      bounds.push([from, from + size]);
+      from += size;
+    }
+    this._rotating = pages > 1;
+    const p = (this._page || 0) % pages;
+    return list.slice(bounds[p][0], bounds[p][1]);
+  }
+
+  _renderChips() {
+    const box = this._el.chips;
+    box.classList.toggle('left', this._c.chip_align === 'left');
+    const html = this._pageItems().map((x) => this._chipHtml(x)).join('');
+    if (box.innerHTML !== html) box.innerHTML = html;
+  }
+
+  _layoutChips(animate) {
+    const box = this._el && this._el.chips;
+    if (!box) return;
+    if (!this._ro && window.ResizeObserver) {
+      this._ro = new ResizeObserver(() => this._layoutChips(false));
+      this._ro.observe(box);
+    }
+    if (!animate) {
+      if (!this._fading) this._renderChips();
+      return;
+    }
+    this._fading = true;
+    box.classList.add('fade');
+    setTimeout(() => {
+      this._renderChips();
+      box.classList.remove('fade');
+      setTimeout(() => { this._fading = false; }, RK_FADE_MS);
+    }, RK_FADE_MS);
+  }
+
+  _startRotation() {
+    this._stopRotation();
+    const sec = parseFloat(this._c && this._c.chip_rotate);
+    if (!sec || sec <= 0) return;
+    this._rotTimer = setInterval(() => {
+      if (!this._rotating || document.hidden) return;
+      this._page = (this._page || 0) + 1;
+      this._layoutChips(true);
+    }, Math.max(3, sec) * 1000 + 2 * RK_FADE_MS);
+  }
+
+  _stopRotation() {
+    if (this._rotTimer) clearInterval(this._rotTimer);
+    this._rotTimer = null;
+  }
+
+  connectedCallback() {
+    if (this._c) this._startRotation();
+  }
+
+  disconnectedCallback() {
+    this._stopRotation();
   }
 
   /* Keep the accent readable against the card background */
@@ -1205,7 +1548,8 @@ class RaumKarteAlias extends NavRoomCard {}
 
 /* ------------------------------ Editor ------------------------------ */
 
-const RK_ENTITY_KEYS = ['light', 'temp', 'humidity', 'co2', 'climate', 'windows', 'alarms'];
+const RK_ENTITY_KEYS = ['light', 'temp', 'humidity', 'co2', 'climate', 'windows', 'alarms', 'presence', 'media', 'covers'];
+const RK_PRESENCE_FILTER = RK_PRESENCE_DC.map((dc) => ({ domain: 'binary_sensor', device_class: dc }));
 
 const RK_WINDOW_FILTER = ['window', 'door', 'garage_door'].map((dc) => ({ domain: 'binary_sensor', device_class: dc }));
 const RK_ALARM_FILTER = ['smoke', 'heat', 'gas', 'carbon_monoxide', 'moisture'].map((dc) => ({ domain: 'binary_sensor', device_class: dc }));
@@ -1221,6 +1565,13 @@ function rkContentSchema(hass) {
     { name: 'climate', selector: { entity: { domain: 'climate' } } },
     { name: 'windows', selector: { entity: { multiple: true, filter: RK_WINDOW_FILTER } } },
     { name: 'alarms', selector: { entity: { multiple: true, filter: RK_ALARM_FILTER } } },
+    { name: 'presence', selector: { entity: { filter: RK_PRESENCE_FILTER } } },
+    { name: 'media', selector: { entity: { multiple: true, domain: 'media_player' } } },
+    { name: 'covers', selector: { entity: { multiple: true, domain: 'cover' } } },
+    { name: 'mode', selector: { entity: { domain: ['input_select', 'select'] } } },
+    { name: 'power', selector: { entity: { multiple: true, domain: 'sensor', device_class: 'power' } } },
+    { name: 'show_battery', selector: { boolean: {} } },
+    { name: 'show_offline', selector: { boolean: {} } },
     {
       name: 'variant',
       selector: {
@@ -1249,8 +1600,20 @@ function rkActionSchema() {
   ];
 }
 
-function rkLookSchema() {
+function rkLookSchema(hass) {
   return [
+    {
+      name: 'chip_align',
+      selector: {
+        select: {
+          mode: 'box',
+          options: [
+            { value: 'justify', label: rkT(hass, 'align_justify') },
+            { value: 'left', label: rkT(hass, 'align_left') },
+          ],
+        },
+      },
+    },
     { name: 'accent_fallback', selector: { color_rgb: {} } },
     { name: 'auto_contrast', selector: { boolean: {} } },
     { name: 'ignore_light_color', selector: { boolean: {} } },
@@ -1268,14 +1631,21 @@ const RK_STEPPERS = [
   { key: 'pwr_size', min: 28, max: 52, step: 1, unit: 'px' },
   { key: 'badge_size', min: 12, max: 26, step: 1, unit: 'px' },
   { key: 'bg_tint', min: 0, max: 40, step: 1, unit: '%', scale: 100 },
+  { key: 'max_chips', min: 1, max: 5, step: 1, unit: '' },
+  { key: 'chip_rotate', min: 0, max: 60, step: 1, unit: 's' },
 ];
 
 const RK_ORDER_META = {
   temp: { labelKey: 'order_temp', icon: 'mdi:thermometer' },
   humidity: { labelKey: 'order_humidity', icon: 'mdi:water-percent' },
   co2: { labelKey: 'order_co2', icon: 'mdi:molecule-co2' },
-  climate: { labelKey: 'order_climate', icon: 'mdi:radiator' },
+  climate: { labelKey: 'order_climate', icon: 'mdi:thermostat' },
   windows: { labelKey: 'order_windows', icon: 'mdi:window-open-variant' },
+  vent: { labelKey: 'order_vent', icon: 'mdi:weather-windy' },
+  media: { labelKey: 'order_media', icon: 'mdi:play' },
+  covers: { labelKey: 'order_covers', icon: 'mdi:roller-shade' },
+  mode: { labelKey: 'order_mode', icon: 'mdi:tune-variant' },
+  power: { labelKey: 'order_power', icon: 'mdi:flash' },
   light: { labelKey: 'order_light', icon: 'mdi:lightbulb-outline' },
 };
 
@@ -1352,13 +1722,16 @@ class NavRoomCardEditor extends HTMLElement {
     const style = document.createElement('style');
     style.textContent = `
       .rk-ed { display: block; }
-      .rk-prev {
+      .rk-head {
         position: sticky;
         top: 0;
         z-index: 3;
         padding: 4px 0 14px;
+        margin-bottom: 8px;
+        border-bottom: 1px solid var(--divider-color);
         background: var(--ha-dialog-surface-background, var(--mdc-theme-surface, var(--card-background-color)));
       }
+      .rk-prev { padding-top: 12px; }
       .rk-prev-label {
         font-size: 12px;
         color: var(--secondary-text-color);
@@ -1374,7 +1747,7 @@ class NavRoomCardEditor extends HTMLElement {
         border: 1px solid var(--outline-color, var(--divider-color));
         border-radius: 999px;
         overflow: hidden;
-        margin: 0 0 16px;
+        margin: 0;
       }
       .rk-tabs button {
         flex: 1;
@@ -1429,10 +1802,10 @@ class NavRoomCardEditor extends HTMLElement {
       .rk-step button ha-icon { --mdc-icon-size: 20px; }
       .rk-step .rk-val {
         display: flex;
-        align-items: baseline;
+        align-items: center;
         justify-content: center;
-        gap: 3px;
-        width: 86px;
+        gap: 2px;
+        width: 96px;
         height: 40px;
         border-radius: 12px;
         background: var(--input-fill-color, rgba(127,127,127,0.1));
@@ -1440,12 +1813,14 @@ class NavRoomCardEditor extends HTMLElement {
         padding: 0 8px;
       }
       .rk-step input {
-        width: 48px;
+        width: 3.2ch;
+        min-width: 0;
+        padding: 0;
         border: none;
         background: none;
         outline: none;
         text-align: right;
-        font: 500 16px Roboto, sans-serif;
+        font: 500 20px Roboto, sans-serif;
         color: var(--primary-text-color);
         line-height: 40px;
         -moz-appearance: textfield;
@@ -1453,7 +1828,7 @@ class NavRoomCardEditor extends HTMLElement {
       .rk-step input::-webkit-outer-spin-button,
       .rk-step input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
       .rk-step input::placeholder { color: var(--secondary-text-color); font-size: 13px; }
-      .rk-step .rk-unit { font-size: 13px; color: var(--secondary-text-color); }
+      .rk-step .rk-unit { font-size: 13px; color: var(--secondary-text-color); padding-top: 3px; }
       .rk-order-hint {
         font-size: 12px;
         color: var(--secondary-text-color);
@@ -1528,8 +1903,6 @@ class NavRoomCardEditor extends HTMLElement {
     this._prevCard = document.createElement('navroom-card');
     pc.appendChild(this._prevCard);
     this._prevWrap.append(this._prevLabel, pc);
-    root.appendChild(this._prevWrap);
-
     /* Tabs */
     const tabs = document.createElement('div');
     tabs.className = 'rk-tabs';
@@ -1544,7 +1917,10 @@ class NavRoomCardEditor extends HTMLElement {
       this._tabBtns[t] = b;
       tabs.appendChild(b);
     });
-    root.appendChild(tabs);
+    const head = document.createElement('div');
+    head.className = 'rk-head';
+    head.append(tabs, this._prevWrap);
+    root.appendChild(head);
 
     /* Panes */
     this._panes = {};
@@ -1617,7 +1993,7 @@ class NavRoomCardEditor extends HTMLElement {
     this._lookTitle.className = 'rk-group-title';
     this._panes.design.appendChild(this._lookTitle);
     this._lookForm = this._makeForm((value) => {
-      this._fireConfig(this._applyForm(value, rkLookSchema().map((s) => s.name)));
+      this._fireConfig(this._applyForm(value, rkLookSchema(this._hass).map((s) => s.name)));
     });
     this._panes.design.appendChild(this._lookForm);
 
@@ -1674,7 +2050,7 @@ class NavRoomCardEditor extends HTMLElement {
     this._resetLabel.textContent = rkT(h, 'reset');
 
     const data = this._formData();
-    [[this._contentForm, rkContentSchema(h)], [this._actionForm, rkActionSchema()], [this._lookForm, rkLookSchema()]].forEach(([f, schema]) => {
+    [[this._contentForm, rkContentSchema(h)], [this._actionForm, rkActionSchema()], [this._lookForm, rkLookSchema(h)]].forEach(([f, schema]) => {
       f.hass = h;
       f.data = data;
       f.schema = schema;
@@ -1723,6 +2099,8 @@ class NavRoomCardEditor extends HTMLElement {
       } else {
         s.input.value = String(this._stepValue(def));
       }
+      const len = Math.max(2, (s.input.value || s.input.placeholder || '').length);
+      s.input.style.width = `${len + 0.4}ch`;
     });
   }
 
