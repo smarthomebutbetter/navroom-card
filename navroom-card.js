@@ -1,7 +1,15 @@
 /**
- * NavRoom Card – Custom Lovelace Card (v2.1.0)
+ * NavRoom Card – Custom Lovelace Card (v2.3.0)
  * Room overview card with area icon, light-color accent, power button,
  * sortable sensor chips (temperature, humidity, CO2) and three layout variants.
+ *
+ * v2.3.0:
+ *  - Auto-discovery ignores diagnostic/config entities (e.g. device-internal
+ *    temperatures of relays, wallboxes or water heaters).
+ *  - A single chip can be switched off explicitly with `temp: none`
+ *    (same for light, humidity, co2) – it no longer falls back to discovery.
+ *  - New option `auto_discover` (default true). When off, only manually
+ *    configured entities are used, so a cleared picker stays empty.
  *
  * v2.2.0:
  *  - Selecting an area in the editor now pre-fills the light and sensor
@@ -33,7 +41,7 @@
  * https://github.com/smarthomebutbetter/navroom-card
  */
 
-const RK_VERSION = '2.2.0';
+const RK_VERSION = '2.3.0';
 
 const RK_DEFAULTS = {
   variant: 'badge',
@@ -54,6 +62,7 @@ const RK_DEFAULTS = {
   badge_size: 18,
   bg_tint: 0.10,
   accent_fallback: '255,183,77',
+  auto_discover: true,
 };
 
 const RK_DESIGN_KEYS = [
@@ -75,6 +84,7 @@ const RK_CO2_ALERT = 1500;
 const RK_I18N = {
   en: {
     area: 'Area',
+    auto_discover: 'Auto-discover entities in this area',
     light: 'Light (group or single light)',
     temp: 'Temperature sensor',
     humidity: 'Humidity sensor',
@@ -104,7 +114,7 @@ const RK_I18N = {
     section_design: 'Design',
     order_title: 'Chip order',
     order_hint: 'Sort with the arrows – chips without a configured sensor are simply skipped.',
-    discovery_hint: 'Selecting an area fills in the light and sensors below automatically – adjust them anytime.',
+    discovery_hint: 'Selecting an area fills in the light and sensors below automatically – adjust them anytime. Turn auto-discovery off to keep a cleared field empty.',
     order_temp: 'Temperature',
     order_humidity: 'Humidity',
     order_co2: 'CO2',
@@ -118,6 +128,7 @@ const RK_I18N = {
   },
   de: {
     area: 'Bereich',
+    auto_discover: 'Entitäten im Bereich automatisch erkennen',
     light: 'Licht (Gruppe oder Einzellicht)',
     temp: 'Temperatursensor',
     humidity: 'Luftfeuchtigkeitssensor',
@@ -147,7 +158,7 @@ const RK_I18N = {
     section_design: 'Design',
     order_title: 'Chip-Reihenfolge',
     order_hint: 'Mit den Pfeilen sortieren – nicht konfigurierte Chips werden einfach übersprungen.',
-    discovery_hint: 'Beim Auswählen eines Bereichs werden Licht und Sensoren unten automatisch eingetragen – du kannst sie jederzeit anpassen.',
+    discovery_hint: 'Beim Auswählen eines Bereichs werden Licht und Sensoren unten automatisch eingetragen – du kannst sie jederzeit anpassen. Schalte die automatische Erkennung aus, damit ein geleertes Feld leer bleibt.',
     order_temp: 'Temperatur',
     order_humidity: 'Luftfeuchtigkeit',
     order_co2: 'CO2',
@@ -190,7 +201,7 @@ function rkDiscover(hass, areaId) {
   let co2 = null;
 
   Object.values(hass.entities).forEach((e) => {
-    if (e.disabled_by || e.hidden_by) return;
+    if (e.disabled_by || e.hidden_by || e.entity_category) return;
     if (!inArea(e)) return;
     const id = e.entity_id;
     const st = hass.states[id];
@@ -283,12 +294,17 @@ class NavRoomCard extends HTMLElement {
   /* Effective entities: manual config wins over auto-discovery */
   _eff() {
     const c = this._c;
-    const d = this._discover();
+    const d = c.auto_discover === false ? {} : this._discover();
+    const pick = (k) => {
+      const v = c[k];
+      if (v === 'none' || v === false) return '';
+      return v || d[k] || '';
+    };
     return {
-      light: c.light || d.light || '',
-      temp: c.temp || d.temp || '',
-      humidity: c.humidity || d.humidity || '',
-      co2: c.co2 || d.co2 || '',
+      light: pick('light'),
+      temp: pick('temp'),
+      humidity: pick('humidity'),
+      co2: pick('co2'),
     };
   }
 
@@ -718,6 +734,7 @@ class RaumKarteAlias extends NavRoomCard {}
 function rkBuildSchema(hass) {
   return [
     { name: 'area', selector: { area: {} } },
+    { name: 'auto_discover', selector: { boolean: {} } },
     {
       type: 'grid',
       schema: [
@@ -918,7 +935,7 @@ class NavRoomCardEditor extends HTMLElement {
           if (config[k] === '' || config[k] === null) delete config[k];
         });
         // Area changed -> re-run discovery and pre-fill the entity pickers
-        if (config.area && config.area !== this._config.area) {
+        if (config.area && config.area !== this._config.area && config.auto_discover !== false) {
           const d = rkDiscover(this._hass, config.area);
           ['light', 'temp', 'humidity', 'co2'].forEach((k) => {
             if (d[k]) config[k] = d[k];
@@ -973,7 +990,7 @@ class NavRoomCardEditor extends HTMLElement {
      yet (e.g. a freshly added card). Runs once per area. */
   _maybeMaterialize() {
     const c = this._config;
-    if (!this._hass || !c.area) return;
+    if (!this._hass || !c.area || c.auto_discover === false) return;
     if (c.light || c.temp || c.humidity || c.co2) return;
     if (this._matForArea === c.area) return;
     this._matForArea = c.area;
