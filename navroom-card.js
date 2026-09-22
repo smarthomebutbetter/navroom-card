@@ -1,7 +1,24 @@
 /**
- * NavRoom Card – Custom Lovelace Card (v2.3.0)
+ * NavRoom Card – Custom Lovelace Card (v2.4.0)
  * Room overview card with area icon, light-color accent, power button,
  * sortable sensor chips (temperature, humidity, CO2) and three layout variants.
+ *
+ * v2.4.0:
+ *  - New mobile-first editor: tabs (Content / Actions / Design), a sticky
+ *    live preview, number fields with -/+ buttons instead of sliders and a
+ *    color picker for the fallback color.
+ *  - Automatic contrast: white/very light colors on light themes and very
+ *    dark colors on dark themes are adjusted so icon and power button stay
+ *    visible (`auto_contrast`, default on).
+ *  - Windows chip: shows how many windows/doors in the room are open.
+ *  - Heating chip: target temperature of the room thermostat, highlighted
+ *    while heating.
+ *  - Alarm state: smoke/heat/gas/CO/water sensors in the room turn the card
+ *    red with a pulsing alarm icon.
+ *  - Humidity warning: chip turns yellow from 65 %, orange from 70 %.
+ *  - Optional area picture as card background (`show_picture`).
+ *  - Swedish, Danish, Norwegian, Finnish and Icelandic translations.
+ *    Thanks @adnansarajlic (#3)
  *
  * v2.3.0:
  *  - Added `ignore_light_color` option: when enabled, the card always uses
@@ -47,7 +64,7 @@
  * https://github.com/smarthomebutbetter/navroom-card
  */
 
-const RK_VERSION = '2.3.0';
+const RK_VERSION = '2.4.0';
 
 const RK_DEFAULTS = {
   variant: 'badge',
@@ -71,21 +88,27 @@ const RK_DEFAULTS = {
   ignore_light_color: false,
   auto_discover: true,
   haptics: true,
+  auto_contrast: true,
+  show_picture: false,
 };
 
 const RK_DESIGN_KEYS = [
   'height', 'radius', 'padding', 'head_height', 'row_gap', 'icon_size',
   'name_size', 'name_weight', 'chip_height', 'chip_font', 'chip_pad',
   'chip_gap', 'pwr_size', 'pwr_icon', 'badge_size', 'bg_tint',
-  'accent_fallback', 'ignore_light_color', 'chip_order',
+  'accent_fallback', 'ignore_light_color', 'auto_contrast', 'show_picture', 'chip_order',
 ];
 
 const RK_VARIANTS = ['badge', 'chip', 'pur'];
-const RK_CHIP_ORDER_DEFAULT = ['temp', 'humidity', 'co2', 'light'];
+const RK_CHIP_ORDER_DEFAULT = ['temp', 'humidity', 'co2', 'climate', 'windows', 'light'];
 const RK_HOLD_MS = 500;
 const RK_DBL_MS = 250;
 const RK_CO2_WARN = 1000;
 const RK_CO2_ALERT = 1500;
+const RK_HUM_WARN = 65;
+const RK_HUM_ALERT = 70;
+const RK_WINDOW_DC = ['window', 'door', 'garage_door'];
+const RK_ALARM_DC = ['smoke', 'heat', 'gas', 'carbon_monoxide', 'moisture'];
 
 /* ------------------------------ i18n ------------------------------ */
 
@@ -94,6 +117,23 @@ const RK_I18N = {
     area: 'Area',
     auto_discover: 'Auto-discover entities in this area',
     haptics: 'Haptic feedback',
+    climate: 'Thermostat',
+    windows: 'Windows & doors',
+    alarms: 'Alarm sensors (smoke, heat, water)',
+    auto_contrast: 'Automatic contrast',
+    show_picture: 'Area picture as background',
+    tab_content: 'Content',
+    tab_actions: 'Actions',
+    tab_design: 'Design',
+    group_sizes: 'Sizes',
+    group_look: 'Colors & look',
+    preview: 'Preview',
+    theme: 'Theme',
+    bg_tint_pct: 'Background tint',
+    order_climate: 'Heating',
+    order_windows: 'Windows',
+    n_open: '{n} open',
+    heat_off: 'Off',
     light: 'Light (group or single light)',
     temp: 'Temperature sensor',
     humidity: 'Humidity sensor',
@@ -123,8 +163,8 @@ const RK_I18N = {
     section_overrides: 'Overrides (optional)',
     section_design: 'Design',
     order_title: 'Chip order',
-    order_hint: 'Sort with the arrows – chips without a configured sensor are simply skipped.',
-    discovery_hint: 'Selecting an area fills in the light and sensors below automatically – adjust them anytime. Turn auto-discovery off to keep a cleared field empty.',
+    order_hint: 'Chips without a sensor are skipped.',
+    discovery_hint: 'Fills in light and sensors from the area. Turn off to keep cleared fields empty.',
     order_temp: 'Temperature',
     order_humidity: 'Humidity',
     order_co2: 'CO2',
@@ -140,6 +180,23 @@ const RK_I18N = {
     area: 'Bereich',
     auto_discover: 'Entitäten im Bereich automatisch erkennen',
     haptics: 'Haptisches Feedback',
+    climate: 'Thermostat',
+    windows: 'Fenster & Türen',
+    alarms: 'Alarmmelder (Rauch, Hitze, Wasser)',
+    auto_contrast: 'Automatischer Kontrast',
+    show_picture: 'Raumbild als Hintergrund',
+    tab_content: 'Inhalt',
+    tab_actions: 'Aktionen',
+    tab_design: 'Design',
+    group_sizes: 'Größen',
+    group_look: 'Farben & Aussehen',
+    preview: 'Vorschau',
+    theme: 'Theme',
+    bg_tint_pct: 'Hintergrund-Einfärbung',
+    order_climate: 'Heizung',
+    order_windows: 'Fenster',
+    n_open: '{n} offen',
+    heat_off: 'Aus',
     light: 'Licht (Gruppe oder Einzellicht)',
     temp: 'Temperatursensor',
     humidity: 'Luftfeuchtigkeitssensor',
@@ -169,8 +226,8 @@ const RK_I18N = {
     section_overrides: 'Überschreiben (optional)',
     section_design: 'Design',
     order_title: 'Chip-Reihenfolge',
-    order_hint: 'Mit den Pfeilen sortieren – nicht konfigurierte Chips werden einfach übersprungen.',
-    discovery_hint: 'Beim Auswählen eines Bereichs werden Licht und Sensoren unten automatisch eingetragen – du kannst sie jederzeit anpassen. Schalte die automatische Erkennung aus, damit ein geleertes Feld leer bleibt.',
+    order_hint: 'Chips ohne Sensor werden übersprungen.',
+    discovery_hint: 'Trägt Licht und Sensoren aus dem Bereich ein. Aus, damit geleerte Felder leer bleiben.',
     order_temp: 'Temperatur',
     order_humidity: 'Luftfeuchtigkeit',
     order_co2: 'CO2',
@@ -186,6 +243,23 @@ const RK_I18N = {
     area: 'Área',
     auto_discover: 'Detectar entidades da área automaticamente',
     haptics: 'Feedback tátil',
+    climate: 'Termostato',
+    windows: 'Janelas e portas',
+    alarms: 'Sensores de alarme (fumaça, calor, água)',
+    auto_contrast: 'Contraste automático',
+    show_picture: 'Imagem da área como fundo',
+    tab_content: 'Conteúdo',
+    tab_actions: 'Ações',
+    tab_design: 'Design',
+    group_sizes: 'Tamanhos',
+    group_look: 'Cores e aparência',
+    preview: 'Pré-visualização',
+    theme: 'Tema',
+    bg_tint_pct: 'Tonalidade do fundo',
+    order_climate: 'Aquecimento',
+    order_windows: 'Janelas',
+    n_open: '{n} abertas',
+    heat_off: 'Desligado',
     light: 'Luz (grupo ou luz única)',
     temp: 'Sensor de temperatura',
     humidity: 'Sensor de umidade',
@@ -215,8 +289,8 @@ const RK_I18N = {
     section_overrides: 'Substituições (opcional)',
     section_design: 'Design',
     order_title: 'Ordem dos chips',
-    order_hint: 'Ordene com as setas – chips sem sensor configurado são simplesmente ignorados.',
-    discovery_hint: 'Ao selecionar uma área, a luz e os sensores abaixo são preenchidos automaticamente – ajuste quando quiser. Desative a detecção automática para que um campo limpo permaneça vazio.',
+    order_hint: 'Chips sem sensor são ignorados.',
+    discovery_hint: 'Preenche luz e sensores a partir da área. Desative para manter campos limpos vazios.',
     order_temp: 'Temperatura',
     order_humidity: 'Umidade',
     order_co2: 'CO2',
@@ -228,13 +302,228 @@ const RK_I18N = {
     error_area: 'Selecione uma área ou defina um nome.',
     card_description: 'Visão geral do cômodo com descoberta automática por área, destaque de cor da luz, botão de energia configurável, chips de sensores ordenáveis e três variantes de layout.',
   },
+  sv: {
+    area: 'Område',
+    light: 'Belysning (grupp eller enskild lampa)',
+    temp: 'Temperatursensor',
+    humidity: 'Luftfuktighetssensor',
+    co2: 'CO2-sensor',
+    variant: 'Variant',
+    variant_badge: 'Räknar-badge på strömknapp',
+    variant_chip: 'Lamp-chip i statusraden',
+    variant_pur: 'Stilren – utan räknare',
+    tap_action: 'Kort: Tryck',
+    hold_action: 'Kort: Håll ned',
+    double_tap_action: 'Kort: Dubbeltryck',
+    power_action: 'Strömknapp: Tryck',
+    name: 'Åsidosätt namn',
+    icon: 'Åsidosätt ikon',
+    height: 'Korthöjd',
+    radius: 'Hörnradie',
+    icon_size: 'Ikonstorlek',
+    name_size: 'Namnstorlek',
+    chip_height: 'Chip-höjd',
+    chip_font: 'Chip-textstorlek',
+    pwr_size: 'Strömknapp',
+    badge_size: 'Badge',
+    bg_tint: 'Bakgrundstoning (0–0.4)',
+    accent_fallback: 'Fallback-färg (R,G,B)',
+    section_interaction: 'Interaktioner',
+    section_overrides: 'Åsidosättningar (valfritt)',
+    section_design: 'Design',
+    order_title: 'Chip-ordning',
+    order_hint: 'Sortera med pilarna – sensorer som inte konfigurerats hoppas över automatiskt.',
+    discovery_hint: 'Val av område fyller automatiskt i lampor och sensorer nedan – du kan ändra dem när som helst.',
+    order_temp: 'Temperatur',
+    order_humidity: 'Luftfuktighet',
+    order_co2: 'CO2',
+    order_light: 'Lamp-chip',
+    reset: 'Återställ design',
+    off: 'Av',
+    one_light: '1 lampa',
+    n_lights: '{n} lampor',
+    error_area: 'Vänligen välj ett område eller ange ett namn.',
+    card_description: 'Rumsöversikt med auto-discovery per område, ljusfärgsaccent, anpassningsbar strömknapp, sorterbara sensor-chips och tre layoutvarianter.',
+  },
+  da: {
+    area: 'Område',
+    light: 'Belysning (gruppe eller enkelt lys)',
+    temp: 'Temperatursensor',
+    humidity: 'Luftfugtighedssensor',
+    co2: 'CO2-sensor',
+    variant: 'Variant',
+    variant_badge: 'Tæller-badge på tænd/sluk-knap',
+    variant_chip: 'Lys-chip i statusrækken',
+    variant_pur: 'Enkel – uden tæller',
+    tap_action: 'Kort: Tryk',
+    hold_action: 'Kort: Hold',
+    double_tap_action: 'Kort: Dobbelttryk',
+    power_action: 'Tænd/sluk-knap: Tryk',
+    name: 'Tilsidesæt navn',
+    icon: 'Tilsidesæt ikon',
+    height: 'Korthøjde',
+    radius: 'Hjørneradius',
+    icon_size: 'Ikonstørrelse',
+    name_size: 'Navnestørrelse',
+    chip_height: 'Chip-højde',
+    chip_font: 'Chip-skriftstørrelse',
+    pwr_size: 'Tænd/sluk-knap',
+    badge_size: 'Badge',
+    bg_tint: 'Baggrundstone (0–0.4)',
+    accent_fallback: 'Fallback-farve (R,G,B)',
+    section_interaction: 'Interaktioner',
+    section_overrides: 'Tilsidesættelser (valgfrit)',
+    section_design: 'Design',
+    order_title: 'Chip-rækkefølge',
+    order_hint: 'Sorter med pilene – sensorer, der ikke er konfigureret, springes automatisk over.',
+    discovery_hint: 'Valg af et område udfylder automatisk lys og sensorer nedenfor – du kan altid ændre dem.',
+    order_temp: 'Temperatur',
+    order_humidity: 'Luftfugtighed',
+    order_co2: 'CO2',
+    order_light: 'Lys-chip',
+    reset: 'Nulstil design',
+    off: 'Fra',
+    one_light: '1 lys',
+    n_lights: '{n} lys',
+    error_area: 'Vælg venligst et område eller indtast et navn.',
+    card_description: 'Rumoversigt med auto-discovery pr. område, lysfarve-accent, konfigurerbar tænd/sluk-knap, sorterbare sensor-chips og tre layoutvarianter.',
+  },
+  no: {
+    area: 'Område',
+    light: 'Belysning (gruppe eller enkeltlys)',
+    temp: 'Temperatursensor',
+    humidity: 'Luftfuktighetssensor',
+    co2: 'CO2-sensor',
+    variant: 'Variant',
+    variant_badge: 'Teller-badge på strømknapp',
+    variant_chip: 'Lys-chip i statusraden',
+    variant_pur: 'Enkel – uten teller',
+    tap_action: 'Kort: Trykk',
+    hold_action: 'Kort: Hold',
+    double_tap_action: 'Kort: Dobbelttrykk',
+    power_action: 'Strømknapp: Trykk',
+    name: 'Overstyr navn',
+    icon: 'Overstyr ikon',
+    height: 'Korthøyde',
+    radius: 'Hjørneradius',
+    icon_size: 'Ikonstørrelse',
+    name_size: 'Navnestørrelse',
+    chip_height: 'Chip-høyde',
+    chip_font: 'Chip-skriftstørrelse',
+    pwr_size: 'Strømknapp',
+    badge_size: 'Badge',
+    bg_tint: 'Bakgrunnstoning (0–0.4)',
+    accent_fallback: 'Fallback-farge (R,G,B)',
+    section_interaction: 'Interaksjoner',
+    section_overrides: 'Overstyringer (valgfritt)',
+    section_design: 'Design',
+    order_title: 'Chip-rekkefølge',
+    order_hint: 'Sorter med pilene – sensorer som ikke er konfigurert hoppes over automatisk.',
+    discovery_hint: 'Valg av område fyller automatisk inn lys og sensorer nedenfor – du kan endre dem når som helst.',
+    order_temp: 'Temperatur',
+    order_humidity: 'Luftfuktighet',
+    order_co2: 'CO2',
+    order_light: 'Lys-chip',
+    reset: 'Tilbakestill design',
+    off: 'Av',
+    one_light: '1 lys',
+    n_lights: '{n} lys',
+    error_area: 'Vennligst velg et område eller oppgi et navn.',
+    card_description: 'Romoverblikk med auto-discovery per område, lysfarge-aksent, konfigurerbar strømknapp, sorterbare sensor-chips og tre layoutvarianter.',
+  },
+  fi: {
+    area: 'Alue',
+    light: 'Valaistus (ryhmä tai yksittäinen valo)',
+    temp: 'Lämpötila-anturi',
+    humidity: 'Kosteusanturi',
+    co2: 'CO2-anturi',
+    variant: 'Variantti',
+    variant_badge: 'Laskurimerkki virtapainikkeessa',
+    variant_chip: 'Valosiru tilarivillä',
+    variant_pur: 'Pelkistetty – ei laskuria',
+    tap_action: 'Kortti: Napauta',
+    hold_action: 'Kortti: Pidä painettuna',
+    double_tap_action: 'Kortti: Kaksoisnapauta',
+    power_action: 'Virtapainike: Napauta',
+    name: 'Korvaa nimi',
+    icon: 'Korvaa kuvake',
+    height: 'Kortin korkeus',
+    radius: 'Kulman säde',
+    icon_size: 'Kuvakekoko',
+    name_size: 'Nimen koko',
+    chip_height: 'Sirun korkeus',
+    chip_font: 'Sirun kirjasinkoko',
+    pwr_size: 'Virtapainike',
+    badge_size: 'Merkki',
+    bg_tint: 'Taustasävy (0–0.4)',
+    accent_fallback: 'Varaväri (R,G,B)',
+    section_interaction: 'Vuorovaikutus',
+    section_overrides: 'Ohitukset (valinnainen)',
+    section_design: 'Ulkoasu',
+    order_title: 'Sirujen järjestys',
+    order_hint: 'Järjestä nuolilla – määrittämättömät anturit ohitetaan automaattisesti.',
+    discovery_hint: 'Alueen valitseminen täyttää valot ja anturit automaattisesti alle – voit muokata niitä milloin vain.',
+    order_temp: 'Lämpötila',
+    order_humidity: 'Kosteus',
+    order_co2: 'CO2',
+    order_light: 'Valosiru',
+    reset: 'Palauta ulkoasu',
+    off: 'Pois',
+    one_light: '1 valo',
+    n_lights: '{n} valoa',
+    error_area: 'Valitse alue tai anna nimi.',
+    card_description: 'Huonenäkymä automaattisella aluehavainnoinnilla, valon värikorostuksella, muokattavalla virtapainikkeella, järjestettävillä anturisiruilla ja kolmella asetteluvaihtoehdolla.',
+  },
+  is: {
+    area: 'Svæði',
+    light: 'Lýsing (hópur eða stakt ljós)',
+    temp: 'Hitaskynjari',
+    humidity: 'Rakaskynjari',
+    co2: 'CO2-skynjari',
+    variant: 'Útgáfa',
+    variant_badge: 'Talningarmerki á aflhnappi',
+    variant_chip: 'Ljósa-flaga í stöðustiku',
+    variant_pur: 'Einfalt – enginn teljari',
+    tap_action: 'Spjald: Ýta',
+    hold_action: 'Spjald: Halda',
+    double_tap_action: 'Spjald: Tvíýta',
+    power_action: 'Aflhnappur: Ýta',
+    name: 'Hnekkja nafni',
+    icon: 'Hnekkja tákni',
+    height: 'Hæð spjalds',
+    radius: 'Hornaradíus',
+    icon_size: 'Táknstærð',
+    name_size: 'Nafnstærð',
+    chip_height: 'Hæð flögu',
+    chip_font: 'Leturstærð flögu',
+    pwr_size: 'Aflhnappur',
+    badge_size: 'Merki',
+    bg_tint: 'Bakgrunnsblær (0–0.4)',
+    accent_fallback: 'Varalitur (R,G,B)',
+    section_interaction: 'Samskipti',
+    section_overrides: 'Hnekkingar (valfrjálst)',
+    section_design: 'Útlit',
+    order_title: 'Röðun flagna',
+    order_hint: 'Raðaðu með örvunum – skynjurum sem ekki eru stilltir er sjálfkrafa sleppt.',
+    discovery_hint: 'Val á svæði fyllir sjálfkrafa út ljós og skynjara hér að neðan – þú getur breytt þeim hvenær sem er.',
+    order_temp: 'Hitastig',
+    order_humidity: 'Raki',
+    order_co2: 'CO2',
+    order_light: 'Ljósa-flaga',
+    reset: 'Endurstilla útlit',
+    off: 'Slökkt',
+    one_light: '1 ljós',
+    n_lights: '{n} ljós',
+    error_area: 'Vinsamlegast veldu svæði eða skráðu heiti.',
+    card_description: 'Herbergisyfirlit með sjálfvirkri svæðagreiningu, ljóslitaskreytingu, stillanlegum aflhnappi, röðanlegum skynjaraflögum og þremur útlitsútgáfum.',
+  },
 };
 
 function rkLang(hass) {
-  const l = (hass && hass.locale && hass.locale.language) || (hass && hass.language) || 'en';
-  const lang = String(l).toLowerCase();
-  if (lang.startsWith('pt')) return 'pt';
-  if (lang.startsWith('de')) return 'de';
+  const raw = String((hass && hass.locale && hass.locale.language) || (hass && hass.language) || 'en').toLowerCase().replace('_', '-');
+  const base = raw.split('-')[0];
+  if (base === 'nb' || base === 'nn') return 'no';
+  if (RK_I18N[base]) return base;
   return 'en';
 }
 
@@ -260,6 +549,9 @@ function rkDiscover(hass, areaId) {
   let temp = null;
   let humidity = null;
   let co2 = null;
+  let climate = null;
+  const windows = [];
+  const alarms = [];
 
   Object.values(hass.entities).forEach((e) => {
     if (e.disabled_by || e.hidden_by || e.entity_category) return;
@@ -270,6 +562,16 @@ function rkDiscover(hass, areaId) {
     const domain = id.split('.')[0];
     if (domain === 'light') {
       lights.push(st);
+      return;
+    }
+    if (domain === 'climate') {
+      if (!climate) climate = id;
+      return;
+    }
+    if (domain === 'binary_sensor') {
+      const bdc = st.attributes && st.attributes.device_class;
+      if (RK_WINDOW_DC.includes(bdc)) windows.push(id);
+      else if (RK_ALARM_DC.includes(bdc)) alarms.push(id);
       return;
     }
     if (domain === 'sensor') {
@@ -292,7 +594,7 @@ function rkDiscover(hass, areaId) {
     light = lights[0].entity_id;
   }
 
-  return { light, temp, humidity, co2 };
+  return { light, temp, humidity, co2, climate, windows, alarms };
 }
 
 /* ------------------------------ Card ------------------------------ */
@@ -320,6 +622,7 @@ class NavRoomCard extends HTMLElement {
     }
     this._userKeys = new Set(Object.keys(config));
     this._c = { ...RK_DEFAULTS, ...config };
+    if (Array.isArray(this._c.accent_fallback)) this._c.accent_fallback = this._c.accent_fallback.join(',');
     if (this._c.variant === 'zaehler') this._c.variant = 'badge';
     if (!RK_VARIANTS.includes(this._c.variant)) this._c.variant = 'badge';
     this._discFor = null;
@@ -361,11 +664,21 @@ class NavRoomCard extends HTMLElement {
       if (v === 'none' || v === false) return '';
       return v || d[k] || '';
     };
+    const list = (k) => {
+      const v = c[k];
+      if (v === 'none' || v === false) return [];
+      if (Array.isArray(v) && v.length) return v;
+      if (typeof v === 'string' && v) return [v];
+      return Array.isArray(d[k]) ? d[k] : [];
+    };
     return {
       light: pick('light'),
       temp: pick('temp'),
       humidity: pick('humidity'),
       co2: pick('co2'),
+      climate: pick('climate'),
+      windows: list('windows'),
+      alarms: list('alarms'),
     };
   }
 
@@ -389,6 +702,8 @@ class NavRoomCard extends HTMLElement {
     if (e.temp) ids.push(e.temp);
     if (e.humidity) ids.push(e.humidity);
     if (e.co2) ids.push(e.co2);
+    if (e.climate) ids.push(e.climate);
+    ids.push(...e.windows, ...e.alarms);
     return ids;
   }
 
@@ -542,8 +857,41 @@ class NavRoomCard extends HTMLElement {
           color: #ff7043;
           background: rgba(255, 112, 67, 0.18);
         }
+        .chip.info {
+          color: #4fa9e6;
+          background: rgba(79, 169, 230, 0.16);
+        }
+        .chip.heat {
+          color: #ff8a65;
+          background: rgba(255, 138, 101, 0.16);
+        }
+        ha-card.pic {
+          background:
+            linear-gradient(var(--rk-overlay), var(--rk-overlay)),
+            var(--rk-pic) center / cover no-repeat,
+            var(--ha-card-background, var(--card-background-color));
+        }
+        ha-card.pic.on {
+          background:
+            linear-gradient(0deg, rgba(var(--rk-accent), ${c.bg_tint}), rgba(var(--rk-accent), ${c.bg_tint})),
+            linear-gradient(var(--rk-overlay), var(--rk-overlay)),
+            var(--rk-pic) center / cover no-repeat,
+            var(--ha-card-background, var(--card-background-color));
+        }
+        ha-card.alarm {
+          box-shadow: inset 0 0 0 2px #e53935, var(--ha-card-box-shadow, none);
+        }
+        ha-card.alarm #ic {
+          color: #e53935;
+          animation: rk-pulse 1.2s ease-in-out infinite;
+        }
+        @keyframes rk-pulse {
+          0%, 100% { opacity: 1; }
+          50% { opacity: 0.35; }
+        }
         @media (prefers-reduced-motion: reduce) {
           ha-card, #pwr, #ic, .chip { transition: none; }
+          ha-card.alarm #ic { animation: none; }
         }
       </style>
       <ha-card>
@@ -694,7 +1042,17 @@ class NavRoomCard extends HTMLElement {
     // Name & icon from the area registry (with overrides)
     const area = c.area && hass.areas ? hass.areas[c.area] : null;
     el.name.textContent = c.name || (area && area.name) || c.area || '';
-    el.ic.setAttribute('icon', c.icon || (area && area.icon) || 'mdi:home-outline');
+    const alarmOn = eff.alarms.some((id) => hass.states[id] && hass.states[id].state === 'on');
+    el.card.classList.toggle('alarm', alarmOn);
+    el.ic.setAttribute('icon', alarmOn ? 'mdi:alarm-light' : (c.icon || (area && area.icon) || 'mdi:home-outline'));
+
+    // Optional area picture as background
+    const pic = c.show_picture && area && area.picture ? area.picture : '';
+    el.card.classList.toggle('pic', !!pic);
+    if (pic) {
+      el.card.style.setProperty('--rk-pic', `url("${String(pic).replace(/"/g, '%22')}")`);
+      el.card.style.setProperty('--rk-overlay', dark ? 'rgba(18,18,22,0.62)' : 'rgba(255,255,255,0.74)');
+    }
 
     // Light state & accent color (average of RGB colors of lights that are on)
     const light = eff.light ? hass.states[eff.light] : null;
@@ -729,6 +1087,7 @@ class NavRoomCard extends HTMLElement {
         .map((i) => Math.round(cols.reduce((a, x) => a + x[i], 0) / cols.length))
         .join(',');
     }
+    if (c.auto_contrast !== false) accent = this._contrastSafe(accent, dark);
     el.card.style.setProperty('--rk-accent', accent);
     el.card.classList.toggle('on', on);
 
@@ -743,7 +1102,26 @@ class NavRoomCard extends HTMLElement {
       defs.temp = { icon: 'mdi:thermometer', t: this._fmt(hass.states[eff.temp], 1, '°'), cls: '' };
     }
     if (eff.humidity) {
-      defs.humidity = { icon: 'mdi:water-percent', t: this._fmt(hass.states[eff.humidity], 0, '%'), cls: '' };
+      const hv = hass.states[eff.humidity] ? parseFloat(hass.states[eff.humidity].state) : NaN;
+      let hcls = '';
+      if (!isNaN(hv) && hv >= RK_HUM_ALERT) hcls = 'alert';
+      else if (!isNaN(hv) && hv >= RK_HUM_WARN) hcls = 'warn';
+      defs.humidity = { icon: 'mdi:water-percent', t: this._fmt(hass.states[eff.humidity], 0, '%'), cls: hcls };
+    }
+    if (eff.climate && hass.states[eff.climate]) {
+      const cs = hass.states[eff.climate];
+      const off = cs.state === 'off' || cs.state === 'unavailable';
+      const heating = cs.attributes && cs.attributes.hvac_action === 'heating';
+      const target = cs.attributes ? cs.attributes.temperature : undefined;
+      defs.climate = {
+        icon: off ? 'mdi:radiator-off' : 'mdi:radiator',
+        t: off ? rkT(hass, 'heat_off') : this._fmt({ state: target }, 1, '°'),
+        cls: heating ? 'heat' : '',
+      };
+    }
+    const open = eff.windows.filter((id) => hass.states[id] && hass.states[id].state === 'on').length;
+    if (open > 0) {
+      defs.windows = { icon: 'mdi:window-open-variant', t: rkT(hass, 'n_open').replace('{n}', open), cls: 'info' };
     }
     if (eff.co2) {
       const v = hass.states[eff.co2] ? parseFloat(hass.states[eff.co2].state) : NaN;
@@ -764,6 +1142,28 @@ class NavRoomCard extends HTMLElement {
     el.chips.innerHTML = chips
       .map((x) => `<span class="chip${x.cls ? ' ' + x.cls : ''}"><ha-icon icon="${x.icon}"></ha-icon>${x.t}</span>`)
       .join('');
+  }
+
+  /* Keep the accent readable against the card background */
+  _contrastSafe(accent, dark) {
+    const rgb = String(accent).split(',').map((x) => parseInt(x, 10));
+    if (rgb.length !== 3 || rgb.some((x) => isNaN(x))) return accent;
+    const lum = (0.2126 * rgb[0] + 0.7152 * rgb[1] + 0.0722 * rgb[2]) / 255;
+    if (!dark) {
+      // (Near-)white: no usable hue -> use the configured fallback color
+      if (Math.min(...rgb) >= 200 && accent !== this._c.accent_fallback) {
+        return this._contrastSafe(this._c.accent_fallback, dark);
+      }
+      if (lum > 0.76) {
+        const f = 0.76 / lum;
+        return rgb.map((x) => Math.round(x * f * 0.85)).join(',');
+      }
+      return accent;
+    }
+    if (lum < 0.18) {
+      return rgb.map((x) => Math.round(x + (255 - x) * 0.45)).join(',');
+    }
+    return accent;
   }
 
   _fmt(state, decimals, unit) {
@@ -805,89 +1205,92 @@ class RaumKarteAlias extends NavRoomCard {}
 
 /* ------------------------------ Editor ------------------------------ */
 
-function rkBuildSchema(hass) {
+const RK_ENTITY_KEYS = ['light', 'temp', 'humidity', 'co2', 'climate', 'windows', 'alarms'];
+
+const RK_WINDOW_FILTER = ['window', 'door', 'garage_door'].map((dc) => ({ domain: 'binary_sensor', device_class: dc }));
+const RK_ALARM_FILTER = ['smoke', 'heat', 'gas', 'carbon_monoxide', 'moisture'].map((dc) => ({ domain: 'binary_sensor', device_class: dc }));
+
+function rkContentSchema(hass) {
   return [
     { name: 'area', selector: { area: {} } },
     { name: 'auto_discover', selector: { boolean: {} } },
+    { name: 'light', selector: { entity: { domain: 'light' } } },
+    { name: 'temp', selector: { entity: { domain: 'sensor', device_class: 'temperature' } } },
+    { name: 'humidity', selector: { entity: { domain: 'sensor', device_class: 'humidity' } } },
+    { name: 'co2', selector: { entity: { domain: 'sensor', device_class: 'carbon_dioxide' } } },
+    { name: 'climate', selector: { entity: { domain: 'climate' } } },
+    { name: 'windows', selector: { entity: { multiple: true, filter: RK_WINDOW_FILTER } } },
+    { name: 'alarms', selector: { entity: { multiple: true, filter: RK_ALARM_FILTER } } },
     {
-      type: 'grid',
-      schema: [
-        { name: 'light', selector: { entity: { domain: 'light' } } },
-        { name: 'temp', selector: { entity: { domain: 'sensor', device_class: 'temperature' } } },
-        { name: 'humidity', selector: { entity: { domain: 'sensor', device_class: 'humidity' } } },
-        { name: 'co2', selector: { entity: { domain: 'sensor', device_class: 'carbon_dioxide' } } },
-        {
-          name: 'variant',
-          selector: {
-            select: {
-              mode: 'dropdown',
-              options: [
-                { value: 'badge', label: rkT(hass, 'variant_badge') },
-                { value: 'chip', label: rkT(hass, 'variant_chip') },
-                { value: 'pur', label: rkT(hass, 'variant_pur') },
-              ],
-            },
-          },
-        },
-      ],
-    },
-    {
-      type: 'expandable',
-      title: rkT(hass, 'section_interaction'),
-      schema: [
-        { name: 'tap_action', selector: { ui_action: {} } },
-        { name: 'hold_action', selector: { ui_action: {} } },
-        { name: 'double_tap_action', selector: { ui_action: {} } },
-        { name: 'power_action', selector: { ui_action: {} } },
-        { name: 'haptics', selector: { boolean: {} } },
-      ],
-    },
-    {
-      type: 'expandable',
-      title: rkT(hass, 'section_overrides'),
-      schema: [
-        {
-          type: 'grid',
-          schema: [
-            { name: 'name', selector: { text: {} } },
-            { name: 'icon', selector: { icon: {} } },
+      name: 'variant',
+      selector: {
+        select: {
+          mode: 'dropdown',
+          options: [
+            { value: 'badge', label: rkT(hass, 'variant_badge') },
+            { value: 'chip', label: rkT(hass, 'variant_chip') },
+            { value: 'pur', label: rkT(hass, 'variant_pur') },
           ],
         },
-      ],
+      },
     },
-    {
-      type: 'expandable',
-      title: rkT(hass, 'section_design'),
-      schema: [
-        {
-          type: 'grid',
-          schema: [
-            { name: 'height', selector: { number: { min: 90, max: 220, step: 2, mode: 'slider', unit_of_measurement: 'px' } } },
-            { name: 'radius', selector: { number: { min: 0, max: 40, step: 1, mode: 'slider', unit_of_measurement: 'px' } } },
-            { name: 'icon_size', selector: { number: { min: 16, max: 40, step: 1, mode: 'slider', unit_of_measurement: 'px' } } },
-            { name: 'name_size', selector: { number: { min: 12, max: 26, step: 0.5, mode: 'slider', unit_of_measurement: 'px' } } },
-            { name: 'chip_height', selector: { number: { min: 18, max: 32, step: 1, mode: 'slider', unit_of_measurement: 'px' } } },
-            { name: 'chip_font', selector: { number: { min: 9, max: 15, step: 0.5, mode: 'slider', unit_of_measurement: 'px' } } },
-            { name: 'pwr_size', selector: { number: { min: 28, max: 52, step: 1, mode: 'slider', unit_of_measurement: 'px' } } },
-            { name: 'badge_size', selector: { number: { min: 12, max: 26, step: 1, mode: 'slider', unit_of_measurement: 'px' } } },
-          ],
-        },
-        { name: 'bg_tint', selector: { number: { min: 0, max: 0.4, step: 0.01, mode: 'slider' } } },
-        { name: 'accent_fallback', selector: { text: {} } },
-        { name: 'ignore_light_color', selector: { boolean: {} } },
-      ],
-    },
+    { name: 'name', selector: { text: {} } },
+    { name: 'icon', selector: { icon: {} } },
   ];
 }
+
+function rkActionSchema() {
+  return [
+    { name: 'tap_action', selector: { ui_action: {} } },
+    { name: 'hold_action', selector: { ui_action: {} } },
+    { name: 'double_tap_action', selector: { ui_action: {} } },
+    { name: 'power_action', selector: { ui_action: {} } },
+    { name: 'haptics', selector: { boolean: {} } },
+  ];
+}
+
+function rkLookSchema() {
+  return [
+    { name: 'accent_fallback', selector: { color_rgb: {} } },
+    { name: 'auto_contrast', selector: { boolean: {} } },
+    { name: 'ignore_light_color', selector: { boolean: {} } },
+    { name: 'show_picture', selector: { boolean: {} } },
+  ];
+}
+
+const RK_STEPPERS = [
+  { key: 'height', min: 90, max: 220, step: 2, unit: 'px' },
+  { key: 'radius', min: 0, max: 40, step: 1, unit: 'px', theme: true },
+  { key: 'icon_size', min: 16, max: 40, step: 1, unit: 'px' },
+  { key: 'name_size', min: 12, max: 26, step: 0.5, unit: 'px' },
+  { key: 'chip_height', min: 18, max: 32, step: 1, unit: 'px' },
+  { key: 'chip_font', min: 9, max: 15, step: 0.5, unit: 'px' },
+  { key: 'pwr_size', min: 28, max: 52, step: 1, unit: 'px' },
+  { key: 'badge_size', min: 12, max: 26, step: 1, unit: 'px' },
+  { key: 'bg_tint', min: 0, max: 40, step: 1, unit: '%', scale: 100 },
+];
 
 const RK_ORDER_META = {
   temp: { labelKey: 'order_temp', icon: 'mdi:thermometer' },
   humidity: { labelKey: 'order_humidity', icon: 'mdi:water-percent' },
   co2: { labelKey: 'order_co2', icon: 'mdi:molecule-co2' },
+  climate: { labelKey: 'order_climate', icon: 'mdi:radiator' },
+  windows: { labelKey: 'order_windows', icon: 'mdi:window-open-variant' },
   light: { labelKey: 'order_light', icon: 'mdi:lightbulb-outline' },
 };
 
+function rkRgbArray(v) {
+  if (Array.isArray(v)) return v;
+  const a = String(v || '').split(',').map((x) => parseInt(x, 10));
+  return a.length === 3 && !a.some(isNaN) ? a : undefined;
+}
+
 class NavRoomCardEditor extends HTMLElement {
+  constructor() {
+    super();
+    this._tab = 'content';
+  }
+
   setConfig(config) {
     this._config = { ...config };
     this._render();
@@ -895,7 +1298,464 @@ class NavRoomCardEditor extends HTMLElement {
 
   set hass(hass) {
     this._hass = hass;
-    if (this._form) this._render();
+    if (this._root) this._refresh();
+  }
+
+  /* ---------- config helpers ---------- */
+
+  _fireConfig(config) {
+    config.type = 'custom:navroom-card';
+    this._config = config;
+    this._updatePreview();
+    this.dispatchEvent(new CustomEvent('config-changed', {
+      detail: { config },
+      bubbles: true,
+      composed: true,
+    }));
+  }
+
+  /* Apply the values of one ha-form. Only the keys of that form are touched,
+     so a cleared field really disappears from the config. */
+  _applyForm(value, keys) {
+    const prev = this._config;
+    const config = { ...prev };
+    keys.forEach((k) => {
+      let v = value[k];
+      if (k === 'accent_fallback' && Array.isArray(v)) v = v.join(',');
+      const empty = v === '' || v === null || v === undefined || (Array.isArray(v) && !v.length);
+      const isDefault = k in RK_DEFAULTS && !(k in prev) && JSON.stringify(v) === JSON.stringify(RK_DEFAULTS[k]);
+      if (empty || isDefault) delete config[k];
+      else config[k] = v;
+    });
+    return config;
+  }
+
+  _fillDiscovery(config) {
+    const d = rkDiscover(this._hass, config.area);
+    RK_ENTITY_KEYS.forEach((k) => {
+      const v = d[k];
+      if (Array.isArray(v) ? v.length : v) config[k] = v;
+      else delete config[k];
+    });
+    this._matForArea = config.area;
+    return config;
+  }
+
+  /* ---------- rendering ---------- */
+
+  _render() {
+    if (!this._root) this._build();
+    this._refresh();
+  }
+
+  _build() {
+    const style = document.createElement('style');
+    style.textContent = `
+      .rk-ed { display: block; }
+      .rk-prev {
+        position: sticky;
+        top: 0;
+        z-index: 3;
+        padding: 4px 0 14px;
+        background: var(--ha-dialog-surface-background, var(--mdc-theme-surface, var(--card-background-color)));
+      }
+      .rk-prev-label {
+        font-size: 12px;
+        color: var(--secondary-text-color);
+        margin: 0 0 6px 2px;
+      }
+      .rk-prev-card {
+        width: min(100%, 260px);
+        margin: 0 auto;
+        pointer-events: none;
+      }
+      .rk-tabs {
+        display: flex;
+        border: 1px solid var(--outline-color, var(--divider-color));
+        border-radius: 999px;
+        overflow: hidden;
+        margin: 0 0 16px;
+      }
+      .rk-tabs button {
+        flex: 1;
+        min-height: 44px;
+        border: none;
+        background: none;
+        color: var(--primary-text-color);
+        font: 500 14px Roboto, sans-serif;
+        cursor: pointer;
+        -webkit-tap-highlight-color: transparent;
+      }
+      .rk-tabs button + button { border-left: 1px solid var(--outline-color, var(--divider-color)); }
+      .rk-tabs button.active {
+        background: rgba(var(--rgb-primary-color, 3,169,244), 0.16);
+        color: var(--primary-color);
+      }
+      .rk-pane[hidden] { display: none; }
+      .rk-group-title {
+        font-size: 14px;
+        font-weight: 500;
+        color: var(--primary-text-color);
+        margin: 20px 0 8px;
+      }
+      .rk-step {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        min-height: 56px;
+        border-bottom: 1px solid var(--divider-color);
+      }
+      .rk-step:last-child { border-bottom: none; }
+      .rk-step label {
+        flex: 1;
+        font-size: 15px;
+        color: var(--primary-text-color);
+      }
+      .rk-step button {
+        width: 40px;
+        height: 40px;
+        border-radius: 50%;
+        border: 1px solid var(--outline-color, var(--divider-color));
+        background: none;
+        color: var(--primary-text-color);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        -webkit-tap-highlight-color: transparent;
+        flex: 0 0 auto;
+      }
+      .rk-step button:active { background: rgba(var(--rgb-primary-color, 3,169,244), 0.16); }
+      .rk-step button ha-icon { --mdc-icon-size: 20px; }
+      .rk-step .rk-val {
+        display: flex;
+        align-items: baseline;
+        justify-content: center;
+        gap: 3px;
+        width: 86px;
+        height: 40px;
+        border-radius: 12px;
+        background: var(--input-fill-color, rgba(127,127,127,0.1));
+        box-sizing: border-box;
+        padding: 0 8px;
+      }
+      .rk-step input {
+        width: 48px;
+        border: none;
+        background: none;
+        outline: none;
+        text-align: right;
+        font: 500 16px Roboto, sans-serif;
+        color: var(--primary-text-color);
+        line-height: 40px;
+        -moz-appearance: textfield;
+      }
+      .rk-step input::-webkit-outer-spin-button,
+      .rk-step input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+      .rk-step input::placeholder { color: var(--secondary-text-color); font-size: 13px; }
+      .rk-step .rk-unit { font-size: 13px; color: var(--secondary-text-color); }
+      .rk-order-hint {
+        font-size: 12px;
+        color: var(--secondary-text-color);
+        margin-bottom: 10px;
+      }
+      .rk-row {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        min-height: 52px;
+        padding: 0 8px 0 14px;
+        border: 1px solid var(--divider-color);
+        border-radius: 14px;
+        margin-bottom: 6px;
+      }
+      .rk-row > ha-icon {
+        --mdc-icon-size: 20px;
+        color: var(--secondary-text-color);
+      }
+      .rk-row span {
+        flex: 1;
+        font-size: 15px;
+        color: var(--primary-text-color);
+      }
+      .rk-row button {
+        width: 40px;
+        height: 40px;
+        background: none;
+        border: none;
+        border-radius: 50%;
+        cursor: pointer;
+        color: var(--secondary-text-color);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+      .rk-row button:disabled { opacity: 0.25; cursor: default; }
+      .rk-row button ha-icon { --mdc-icon-size: 22px; }
+      .rk-reset {
+        margin: 20px 0 8px;
+        display: flex;
+        justify-content: center;
+      }
+      .rk-reset button {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        min-height: 44px;
+        padding: 0 20px;
+        border: 1px solid var(--outline-color, var(--divider-color));
+        border-radius: 999px;
+        background: none;
+        color: var(--primary-text-color);
+        font: 500 14px Roboto, sans-serif;
+        cursor: pointer;
+      }
+      .rk-reset button ha-icon { --mdc-icon-size: 18px; }
+    `;
+    this.appendChild(style);
+
+    const root = document.createElement('div');
+    root.className = 'rk-ed';
+    this._root = root;
+
+    /* Sticky live preview */
+    this._prevWrap = document.createElement('div');
+    this._prevWrap.className = 'rk-prev';
+    this._prevLabel = document.createElement('div');
+    this._prevLabel.className = 'rk-prev-label';
+    const pc = document.createElement('div');
+    pc.className = 'rk-prev-card';
+    this._prevCard = document.createElement('navroom-card');
+    pc.appendChild(this._prevCard);
+    this._prevWrap.append(this._prevLabel, pc);
+    root.appendChild(this._prevWrap);
+
+    /* Tabs */
+    const tabs = document.createElement('div');
+    tabs.className = 'rk-tabs';
+    this._tabBtns = {};
+    ['content', 'actions', 'design'].forEach((t) => {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.addEventListener('click', () => {
+        this._tab = t;
+        this._refreshTabs();
+      });
+      this._tabBtns[t] = b;
+      tabs.appendChild(b);
+    });
+    root.appendChild(tabs);
+
+    /* Panes */
+    this._panes = {};
+    ['content', 'actions', 'design'].forEach((t) => {
+      const p = document.createElement('div');
+      p.className = 'rk-pane';
+      this._panes[t] = p;
+      root.appendChild(p);
+    });
+
+    // Content
+    this._contentForm = this._makeForm((value) => {
+      const prevArea = this._config.area;
+      let config = this._applyForm(value, rkContentSchema(this._hass).map((s) => s.name));
+      if (config.area && config.area !== prevArea && config.auto_discover !== false) {
+        config = this._fillDiscovery(config);
+        this._fireConfig(config);
+        this._refresh();
+        return;
+      }
+      this._fireConfig(config);
+    });
+    this._panes.content.appendChild(this._contentForm);
+
+    // Actions
+    this._actionForm = this._makeForm((value) => {
+      this._fireConfig(this._applyForm(value, rkActionSchema().map((s) => s.name)));
+    });
+    this._panes.actions.appendChild(this._actionForm);
+
+    // Design: size steppers
+    this._sizeTitle = document.createElement('div');
+    this._sizeTitle.className = 'rk-group-title';
+    this._panes.design.appendChild(this._sizeTitle);
+    this._steppers = {};
+    const box = document.createElement('div');
+    RK_STEPPERS.forEach((def) => {
+      const row = document.createElement('div');
+      row.className = 'rk-step';
+      row.innerHTML = `
+        <label></label>
+        <button type="button" data-d="-1"><ha-icon icon="mdi:minus"></ha-icon></button>
+        <div class="rk-val"><input type="number" inputmode="decimal" step="${def.step}"><span class="rk-unit">${def.unit}</span></div>
+        <button type="button" data-d="1"><ha-icon icon="mdi:plus"></ha-icon></button>
+      `;
+      const input = row.querySelector('input');
+      row.querySelectorAll('button').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          const cur = this._stepValue(def);
+          this._setStep(def, cur + parseInt(btn.dataset.d, 10) * def.step);
+        });
+      });
+      input.addEventListener('change', () => {
+        if (input.value === '' && def.theme) {
+          const config = { ...this._config };
+          delete config[def.key];
+          this._fireConfig(config);
+          this._refreshSteppers();
+          return;
+        }
+        this._setStep(def, parseFloat(String(input.value).replace(',', '.')));
+      });
+      this._steppers[def.key] = { row, input, label: row.querySelector('label') };
+      box.appendChild(row);
+    });
+    this._panes.design.appendChild(box);
+
+    // Design: colors & toggles
+    this._lookTitle = document.createElement('div');
+    this._lookTitle.className = 'rk-group-title';
+    this._panes.design.appendChild(this._lookTitle);
+    this._lookForm = this._makeForm((value) => {
+      this._fireConfig(this._applyForm(value, rkLookSchema().map((s) => s.name)));
+    });
+    this._panes.design.appendChild(this._lookForm);
+
+    // Design: chip order
+    this._orderTitle = document.createElement('div');
+    this._orderTitle.className = 'rk-group-title';
+    this._orderHint = document.createElement('div');
+    this._orderHint.className = 'rk-order-hint';
+    this._orderList = document.createElement('div');
+    this._panes.design.append(this._orderTitle, this._orderHint, this._orderList);
+
+    // Design: reset
+    const reset = document.createElement('div');
+    reset.className = 'rk-reset';
+    reset.innerHTML = '<button type="button"><ha-icon icon="mdi:restore"></ha-icon><span></span></button>';
+    this._resetLabel = reset.querySelector('span');
+    reset.querySelector('button').addEventListener('click', () => {
+      const config = { ...this._config };
+      RK_DESIGN_KEYS.forEach((k) => delete config[k]);
+      delete config.variant;
+      this._fireConfig(config);
+      this._refresh();
+    });
+    this._panes.design.appendChild(reset);
+
+    this.appendChild(root);
+  }
+
+  _makeForm(onChange) {
+    const f = document.createElement('ha-form');
+    f.computeLabel = (s) => rkT(this._hass, s.name);
+    f.computeHelper = (s) => (s.name === 'auto_discover' ? rkT(this._hass, 'discovery_hint') : undefined);
+    f.addEventListener('value-changed', (ev) => onChange(ev.detail.value || {}));
+    return f;
+  }
+
+  _formData() {
+    const data = { ...RK_DEFAULTS, ...this._config };
+    data.accent_fallback = rkRgbArray(data.accent_fallback);
+    return data;
+  }
+
+  _refresh() {
+    if (!this._root) return;
+    const h = this._hass;
+    this._prevLabel.textContent = rkT(h, 'preview');
+    this._tabBtns.content.textContent = rkT(h, 'tab_content');
+    this._tabBtns.actions.textContent = rkT(h, 'tab_actions');
+    this._tabBtns.design.textContent = rkT(h, 'tab_design');
+    this._sizeTitle.textContent = rkT(h, 'group_sizes');
+    this._lookTitle.textContent = rkT(h, 'group_look');
+    this._orderTitle.textContent = rkT(h, 'order_title');
+    this._orderHint.textContent = rkT(h, 'order_hint');
+    this._resetLabel.textContent = rkT(h, 'reset');
+
+    const data = this._formData();
+    [[this._contentForm, rkContentSchema(h)], [this._actionForm, rkActionSchema()], [this._lookForm, rkLookSchema()]].forEach(([f, schema]) => {
+      f.hass = h;
+      f.data = data;
+      f.schema = schema;
+    });
+
+    this._maybeMaterialize();
+    this._refreshTabs();
+    this._refreshSteppers();
+    this._renderOrder();
+    this._updatePreview();
+  }
+
+  _refreshTabs() {
+    Object.keys(this._panes).forEach((t) => {
+      this._panes[t].hidden = t !== this._tab;
+      this._tabBtns[t].classList.toggle('active', t === this._tab);
+    });
+  }
+
+  _stepValue(def) {
+    const raw = this._config[def.key];
+    const v = raw === undefined ? RK_DEFAULTS[def.key] : parseFloat(raw);
+    return def.scale ? Math.round(v * def.scale) : v;
+  }
+
+  _setStep(def, v) {
+    if (isNaN(v)) {
+      this._refreshSteppers();
+      return;
+    }
+    v = Math.min(def.max, Math.max(def.min, v));
+    v = +(Math.round(v / def.step) * def.step).toFixed(2);
+    const stored = def.scale ? +(v / def.scale).toFixed(3) : v;
+    this._fireConfig({ ...this._config, [def.key]: stored });
+    this._refreshSteppers();
+  }
+
+  _refreshSteppers() {
+    const h = this._hass;
+    RK_STEPPERS.forEach((def) => {
+      const s = this._steppers[def.key];
+      s.label.textContent = rkT(h, def.key === 'bg_tint' ? 'bg_tint_pct' : def.key);
+      if (def.theme && this._config[def.key] === undefined) {
+        s.input.value = '';
+        s.input.placeholder = rkT(h, 'theme');
+      } else {
+        s.input.value = String(this._stepValue(def));
+      }
+    });
+  }
+
+  _updatePreview() {
+    if (!this._prevCard) return;
+    const c = this._config || {};
+    if (!c.area && !c.name) {
+      this._prevWrap.hidden = true;
+      return;
+    }
+    this._prevWrap.hidden = false;
+    try {
+      this._prevCard.setConfig({ ...c, haptics: false });
+    } catch (e) {
+      this._prevWrap.hidden = true;
+      return;
+    }
+    if (this._hass) this._prevCard.hass = this._hass;
+  }
+
+  /* Pre-fill the pickers when the editor opens with an area but no entities
+     yet (e.g. a freshly added card). Runs once per area. */
+  _maybeMaterialize() {
+    const c = this._config;
+    if (!this._hass || !c.area || c.auto_discover === false) return;
+    if (RK_ENTITY_KEYS.some((k) => c[k])) return;
+    if (this._matForArea === c.area) return;
+    const config = this._fillDiscovery({ ...c });
+    if (RK_ENTITY_KEYS.some((k) => config[k])) {
+      this._fireConfig(config);
+      const data = this._formData();
+      [this._contentForm, this._actionForm, this._lookForm].forEach((f) => { f.data = data; });
+    }
   }
 
   _currentOrder() {
@@ -905,180 +1765,6 @@ class NavRoomCardEditor extends HTMLElement {
       if (!clean.includes(k)) clean.push(k);
     });
     return clean;
-  }
-
-  _fireConfig(config) {
-    config.type = 'custom:navroom-card';
-    this._config = config;
-    this.dispatchEvent(new CustomEvent('config-changed', {
-      detail: { config },
-      bubbles: true,
-      composed: true,
-    }));
-  }
-
-  _render() {
-    if (!this._form) {
-      const style = document.createElement('style');
-      style.textContent = `
-        .rk-disc-hint {
-          font-size: 12px;
-          color: var(--secondary-text-color);
-          margin: 4px 0 12px;
-          line-height: 1.4;
-        }
-        .rk-order { margin-top: 20px; }
-        .rk-order-title {
-          font-size: 14px;
-          font-weight: 500;
-          color: var(--primary-text-color);
-          margin-bottom: 8px;
-        }
-        .rk-order-hint {
-          font-size: 12px;
-          color: var(--secondary-text-color);
-          margin-bottom: 10px;
-        }
-        .rk-row {
-          display: flex;
-          align-items: center;
-          gap: 10px;
-          padding: 8px 12px;
-          border: 1px solid var(--divider-color);
-          border-radius: 10px;
-          margin-bottom: 6px;
-          background: var(--card-background-color);
-        }
-        .rk-row ha-icon:first-child {
-          --mdc-icon-size: 18px;
-          color: var(--secondary-text-color);
-        }
-        .rk-row span {
-          flex: 1;
-          font-size: 14px;
-          color: var(--primary-text-color);
-        }
-        .rk-row button {
-          background: none;
-          border: none;
-          padding: 4px;
-          cursor: pointer;
-          color: var(--secondary-text-color);
-          border-radius: 6px;
-          display: flex;
-        }
-        .rk-row button:hover:not(:disabled) {
-          background: rgba(var(--rgb-primary-color, 100,100,255), 0.1);
-          color: var(--primary-color);
-        }
-        .rk-row button:disabled { opacity: 0.25; cursor: default; }
-        .rk-row button ha-icon { --mdc-icon-size: 20px; }
-        .rk-reset {
-          margin-top: 14px;
-          display: flex;
-          justify-content: flex-end;
-        }
-        .rk-reset button {
-          display: inline-flex;
-          align-items: center;
-          gap: 6px;
-          padding: 8px 14px;
-          border: 1px solid var(--divider-color);
-          border-radius: 999px;
-          background: none;
-          color: var(--secondary-text-color);
-          font: 500 13px Roboto, sans-serif;
-          cursor: pointer;
-          transition: all .15s ease;
-        }
-        .rk-reset button:hover {
-          border-color: var(--primary-color);
-          color: var(--primary-color);
-        }
-        .rk-reset button ha-icon { --mdc-icon-size: 16px; }
-      `;
-      this.appendChild(style);
-
-      this._discHint = document.createElement('div');
-      this._discHint.className = 'rk-disc-hint';
-      this.appendChild(this._discHint);
-
-      this._form = document.createElement('ha-form');
-      this._form.computeLabel = (s) => rkT(this._hass, s.name);
-      this._form.addEventListener('value-changed', (ev) => {
-        const config = { ...ev.detail.value };
-        Object.keys(config).forEach((k) => {
-          if (config[k] === '' || config[k] === null) delete config[k];
-        });
-        // Area changed -> re-run discovery and pre-fill the entity pickers
-        if (config.area && config.area !== this._config.area && config.auto_discover !== false) {
-          const d = rkDiscover(this._hass, config.area);
-          ['light', 'temp', 'humidity', 'co2'].forEach((k) => {
-            if (d[k]) config[k] = d[k];
-            else delete config[k];
-          });
-          this._matForArea = config.area;
-        }
-        // Keep chip_order (managed by the sort list below)
-        if (this._config.chip_order) config.chip_order = this._config.chip_order;
-        this._fireConfig(config);
-      });
-      this.appendChild(this._form);
-
-      this._orderBox = document.createElement('div');
-      this._orderBox.className = 'rk-order';
-      this._orderBox.innerHTML = `
-        <div class="rk-order-title"></div>
-        <div class="rk-order-hint"></div>
-        <div class="rk-order-list"></div>
-        <div class="rk-reset">
-          <button type="button">
-            <ha-icon icon="mdi:restore"></ha-icon>
-            <span class="rk-reset-label"></span>
-          </button>
-        </div>
-      `;
-      this.appendChild(this._orderBox);
-      this._orderList = this._orderBox.querySelector('.rk-order-list');
-
-      this._orderBox.querySelector('.rk-reset button').addEventListener('click', () => {
-        const config = { ...this._config };
-        RK_DESIGN_KEYS.forEach((k) => delete config[k]);
-        delete config.variant;
-        this._fireConfig(config);
-        this._render();
-      });
-    }
-
-    this._discHint.textContent = rkT(this._hass, 'discovery_hint');
-    this._orderBox.querySelector('.rk-order-title').textContent = rkT(this._hass, 'order_title');
-    this._orderBox.querySelector('.rk-order-hint').textContent = rkT(this._hass, 'order_hint');
-    this._orderBox.querySelector('.rk-reset-label').textContent = rkT(this._hass, 'reset');
-
-    this._form.hass = this._hass;
-    this._form.data = { ...RK_DEFAULTS, ...this._config };
-    this._form.schema = rkBuildSchema(this._hass);
-    this._maybeMaterialize();
-    this._renderOrder();
-  }
-
-  /* Pre-fill the pickers when the editor opens with an area but no entities
-     yet (e.g. a freshly added card). Runs once per area. */
-  _maybeMaterialize() {
-    const c = this._config;
-    if (!this._hass || !c.area || c.auto_discover === false) return;
-    if (c.light || c.temp || c.humidity || c.co2) return;
-    if (this._matForArea === c.area) return;
-    this._matForArea = c.area;
-    const d = rkDiscover(this._hass, c.area);
-    const filled = {};
-    ['light', 'temp', 'humidity', 'co2'].forEach((k) => {
-      if (d[k]) filled[k] = d[k];
-    });
-    if (Object.keys(filled).length) {
-      this._fireConfig({ ...c, ...filled });
-      this._form.data = { ...RK_DEFAULTS, ...this._config };
-    }
   }
 
   _renderOrder() {
